@@ -27,7 +27,7 @@ BarWidget {
   moduleName: "io.github.hugorolimf.island"
   // Portuguese, or English for every other locale.
   readonly property bool portuguese: Qt.locale().name.indexOf("pt") === 0
-  readonly property var enText: ({"RESPONDER": "REPLY", "ABRIR": "OPEN", "ABRIR APP": "OPEN APP", "ABRIR IPHONE": "OPEN IPHONE", "FECHAR": "CLOSE", "COPIADO": "COPIED", "COPIAR": "COPY", "Gravando": "Recording", "Transcrevendo…": "Transcribing…", "Ditando…": "Dictating…", "Responder…": "Reply…", "GRAVANDO TELA": "RECORDING SCREEN", "  ·  agora": "  ·  now"})
+  readonly property var enText: ({"RESPONDER": "REPLY", "ABRIR": "OPEN", "ABRIR APP": "OPEN APP", "ABRIR IPHONE": "OPEN IPHONE", "FECHAR": "CLOSE", "COPIADO": "COPIED", "COPIAR": "COPY", "Gravando": "Recording", "Transcrevendo…": "Transcribing…", "Ditando…": "Dictating…", "Responder…": "Reply…", "GRAVANDO TELA": "RECORDING SCREEN", "  ·  agora": "  ·  now", "Lembrete": "Reminder"})
   function tr(text) { return portuguese || enText[text] === undefined ? text : enText[text] }
 
   // ---- anatomy tokens
@@ -40,6 +40,7 @@ BarWidget {
   readonly property color faint: "#2a2a2a"
   readonly property color red: "#ff6b6b"
   readonly property color blue: "#6b9bff"
+  readonly property color amber: "#f5b84a"
   readonly property color green: "#6be0a0"
   readonly property var ease: [0.32, 0.72, 0, 1, 1, 1]
   readonly property int morphMs: 550
@@ -118,6 +119,11 @@ BarWidget {
   readonly property real screenStartMs: leader ? leader.srcScreenStartMs : 0
   property real nowMs: Date.now()
   readonly property string screenElapsed: screenStartMs > 0 ? formatClock(Math.max(0, (nowMs - screenStartMs) / 1000)) : "00:00"
+
+  // ---- reminders (omarchy-reminder; the nearest one counts down in the notch)
+  property var srcReminder: null
+  readonly property var reminder: leader ? leader.srcReminder : null
+  readonly property string reminderLeft: reminder ? formatClock(Math.max(0, reminder.at - nowMs / 1000)) : ""
 
   // ---- media (MPRIS, signal driven)
   readonly property var players: Mpris.players ? Mpris.players.values : []
@@ -485,6 +491,7 @@ BarWidget {
     : hudActive ? "hud"
     : notifActive ? "notif"
     : screenRecording ? "screen"
+    : reminder ? "reminder"
     : mediaActive ? "media" : "idle"
 
   // ---- hover / cards
@@ -528,6 +535,7 @@ BarWidget {
     if (view === "dictation") return u(196)
     if (view === "transcribing") return transRow.implicitWidth + u(32)
     if (view === "screen") return screenRow.implicitWidth + u(32)
+    if (view === "reminder") return reminderRow.implicitWidth + u(32)
     if (view === "media") return u(260)
     if (view === "hud") return hudBar ? u(260) : hudRow.implicitWidth + u(36)
     return 0
@@ -823,6 +831,57 @@ BarWidget {
     repeat: true
     running: root.screenRecording
     onTriggered: { root.nowMs = Date.now(); root.recCheck() }
+    onRunningChanged: root.nowMs = Date.now()
+  }
+
+  // =====================================================================
+  // Reminders: omarchy-reminder calls `omarchy-shell omarchy.indicators
+  // refresh` when one is set, fires or is cleared. The bar's indicators
+  // widget is gone, so the notch answers that target itself.
+
+  function reminderCheck() {
+    if (!isLeader) { if (leader) leader.reminderCheck(); return }
+    if (!reminderProc.running) reminderProc.running = true
+  }
+
+  IpcHandler {
+    target: "omarchy.indicators"
+    function refresh(): void { root.reminderCheck() }
+  }
+
+  Process {
+    id: reminderProc
+    command: ["omarchy-reminder", "show", "--json"]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        var next = null
+        try {
+          var list = JSON.parse(text).reminders || []
+          for (var i = 0; i < list.length; i++) if (!next || list[i].at < next.at) next = list[i]
+        } catch (e) {}
+        root.srcReminder = next
+      }
+    }
+  }
+
+  // also on start, and once a minute in case a refresh call was missed
+  Timer {
+    interval: 60000
+    repeat: true
+    triggeredOnStart: true
+    running: root.isLeader
+    onTriggered: root.reminderCheck()
+  }
+
+  Timer {
+    interval: 1000
+    repeat: true
+    running: root.reminder !== null && !root.screenRecording
+    onTriggered: {
+      root.nowMs = Date.now()
+      if (root.reminder && root.reminder.at * 1000 <= root.nowMs - 2000) root.reminderCheck()
+    }
     onRunningChanged: root.nowMs = Date.now()
   }
 
@@ -1477,6 +1536,35 @@ BarWidget {
           PulseDot { anchors.verticalCenter: parent.verticalCenter; size: root.u(6); color: root.red; running: root.view === "screen" }
           Label { anchors.verticalCenter: parent.verticalCenter; text: root.tr("Gravando") }
           Sub { anchors.verticalCenter: parent.verticalCenter; text: root.screenElapsed; font.features: ({ "tnum": 1 }) }
+        }
+      }
+
+      Page {
+        key: "reminder"
+        width: reminderRow.implicitWidth
+        height: root.compactH
+        Row {
+          id: reminderRow
+          anchors.verticalCenter: parent.verticalCenter
+          spacing: root.u(7)
+          StrokeIcon {
+            anchors.verticalCenter: parent.verticalCenter
+            size: root.u(14)
+            color: root.amber
+            path: Icons.alarm
+          }
+          Label {
+            anchors.verticalCenter: parent.verticalCenter
+            width: Math.min(implicitWidth, root.u(170))
+            elide: Text.ElideRight
+            text: root.reminder ? (root.reminder.message || root.tr("Lembrete")) : ""
+          }
+          Sub { anchors.verticalCenter: parent.verticalCenter; text: root.reminderLeft; font.features: ({ "tnum": 1 }) }
+        }
+        MouseArea {
+          anchors.fill: parent
+          cursorShape: Qt.PointingHandCursor
+          onClicked: root.run("omarchy-reminder show")
         }
       }
 
