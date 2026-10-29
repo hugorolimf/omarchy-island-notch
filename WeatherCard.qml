@@ -13,7 +13,7 @@ Item {
   id: root
   // Portuguese, or English for every other locale.
   readonly property bool portuguese: Qt.locale().name.indexOf("pt") === 0
-  readonly property var enText: ({ "SENSAÇÃO ": "FEELS LIKE ", "° · UMIDADE ": "° · HUMIDITY ",
+  readonly property var enText: ({ "SENSAÇÃO ": "FEELS LIKE ", "° · UMIDADE ": "° · HUMIDITY ", "% · VENTO ": "% · WIND ",
     "SEM CONEXÃO COM O SERVIÇO DO TEMPO": "NO CONNECTION TO THE WEATHER SERVICE", "CARREGANDO O TEMPO…": "LOADING THE WEATHER…" })
   function tr(text) { return portuguese || enText[text] === undefined ? text : enText[text] }
 
@@ -149,7 +149,7 @@ Item {
 
       Text {
         text: root.current ? (root.tr("SENSAÇÃO ") + root.deg(root.current.apparent_temperature) + root.tr("° · UMIDADE ")
-          + Math.round(Number(root.current.relative_humidity_2m)) + "% · VENTO "
+          + Math.round(Number(root.current.relative_humidity_2m)) + root.tr("% · VENTO ")
           + Math.round(Number(root.current.wind_speed_10m)) + " KM/H") : ""
         color: root.muted
         font.family: root.monoFont

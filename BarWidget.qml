@@ -27,7 +27,7 @@ BarWidget {
   moduleName: "io.github.hugorolimf.island"
   // Portuguese, or English for every other locale.
   readonly property bool portuguese: Qt.locale().name.indexOf("pt") === 0
-  readonly property var enText: ({"RESPONDER": "REPLY", "ABRIR": "OPEN", "ABRIR APP": "OPEN APP", "ABRIR IPHONE": "OPEN IPHONE", "FECHAR": "CLOSE", "COPIADO": "COPIED", "COPIAR": "COPY", "Gravando": "Recording", "Transcrevendo…": "Transcribing…", "Ditando…": "Dictating…", "Responder…": "Reply…", "GRAVANDO TELA": "RECORDING SCREEN", "  ·  agora": "  ·  now", "Lembrete": "Reminder"})
+  readonly property var enText: ({"RESPONDER": "REPLY", "ABRIR": "OPEN", "ABRIR APP": "OPEN APP", "ABRIR IPHONE": "OPEN IPHONE", "FECHAR": "CLOSE", "COPIADO": "COPIED", "COPIAR": "COPY", "Gravando": "Recording", "Transcrevendo…": "Transcribing…", "Ditando…": "Dictating…", "Responder…": "Reply…", "GRAVANDO TELA": "RECORDING SCREEN", "PARAR": "STOP", "  ·  agora": "  ·  now", "Lembrete": "Reminder"})
   function tr(text) { return portuguese || enText[text] === undefined ? text : enText[text] }
 
   // ---- anatomy tokens
@@ -1870,11 +1870,18 @@ BarWidget {
                   onClicked: root.sendReply(replyInput.text)
                 }
               }
+              // the draft belongs to one notification: another one starts empty
+              property string draftUid: ""
               Connections {
                 target: root
                 function onShownPinnedChanged() {
                   if (root.shownPinned && replyBox.visible) Qt.callLater(function() { replyInput.forceActiveFocus() })
                   if (!root.shownPinned) replyInput.text = ""
+                }
+                function onShownNotifChanged() {
+                  var uid = root.shownNotif ? String(root.shownNotif.uid || "") : ""
+                  if (uid === "" || uid !== replyBox.draftUid) replyInput.text = ""
+                  replyBox.draftUid = uid
                 }
               }
             }
@@ -2167,7 +2174,7 @@ BarWidget {
             anchors.centerIn: parent
             spacing: root.u(6)
             StrokeIcon { anchors.verticalCenter: parent.verticalCenter; size: root.u(12); color: root.red; path: Icons.stop }
-            Label { anchors.verticalCenter: parent.verticalCenter; text: "PARAR"; color: root.red }
+            Label { anchors.verticalCenter: parent.verticalCenter; text: root.tr("PARAR"); color: root.red }
           }
           MouseArea {
             id: stopArea
