@@ -1805,6 +1805,7 @@ BarWidget {
                 Keys.onEnterPressed: root.sendReply(text)
                 Keys.onEscapePressed: root.unpinNotification()
                 Text {
+                  textFormat: Text.PlainText
                   anchors.verticalCenter: parent.verticalCenter
                   visible: parent.text === "" && !root.replySent
                   text: root.shownNotif && root.shownNotif.replyHint ? root.shownNotif.replyHint : root.tr("Responder…")
@@ -2117,6 +2118,7 @@ BarWidget {
           spacing: 1
           Sub { text: root.tr("GRAVANDO TELA") }
           Text {
+            textFormat: Text.PlainText
             text: root.screenElapsed
             color: root.strong
             font.family: root.monoFont
