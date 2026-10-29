@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "id": "io.github.hugorolimf.island",
+  "name": "Island Notch",
+  "version": "1.0.0",
+  "author": "Hugo Rolim Filho",
+  "license": "MIT",
+  "homepage": "https://github.com/hugorolimf/omarchy-island-notch",
+  "description": "A Dynamic Island style notch in the middle of the bar: music, screen recording, dictation, notifications and the volume and brightness indicators, growing out of the bar and back",
+  "kinds": [
+    "bar-widget",
+    "panel"
+  ],
+  "keepLoaded": true,
+  "entryPoints": {
+    "barWidget": "BarWidget.qml",
+    "panel": "Osd.qml"
+  },
+  "barWidget": {
+    "displayName": "Island Notch",
+    "description": "Music, recording, dictation and notifications in a notch",
+    "category": "Workflow",
+    "allowMultiple": false,
+    "defaultSection": "center"
+  },
+  "omarchy": {
+    "clonedFrom": "omarchy.osd"
+  }
+}
