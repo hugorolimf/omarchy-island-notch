@@ -385,12 +385,12 @@ BarWidget {
       + "r=$(omarchy-shell notifications replyFile \"$1\" \"$f\"); rm -f \"$f\"; printf '%s' \"$r\"",
       "island-reply", String(notif.uid || "")]
     replyText = t
+    replyProc.stdinEnabled = true
     replyProc.running = true
   }
   property string replyText: ""
   Process {
     id: replyProc
-    stdinEnabled: true
     onStarted: { write(root.replyText); stdinEnabled = false; root.replyText = "" }
     stdout: StdioCollector {
       onStreamFinished: {
@@ -403,9 +403,23 @@ BarWidget {
     }
   }
 
+  // Clipboard writes go through wl-copy's stdin: an argument would show the
+  // text to any account that can read process command lines.
+  property string clipboardText: ""
+  function copyText(text) {
+    clipboardText = String(text || "")
+    clipboardProc.stdinEnabled = true
+    clipboardProc.running = true
+  }
+  Process {
+    id: clipboardProc
+    command: ["wl-copy"]
+    onStarted: { write(root.clipboardText); stdinEnabled = false; root.clipboardText = "" }
+  }
+
   function copyNotification() {
     if (!notif || !notif.copy) return
-    Quickshell.execDetached(["wl-copy", "--", notif.copy])
+    copyText(notif.copy)
     notifCopied = true
     notifTimer.stop()
     copiedTimer.restart()
