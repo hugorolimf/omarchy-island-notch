@@ -1264,10 +1264,11 @@ BarWidget {
   readonly property string monitorName: QsWindow.window && QsWindow.window.screen ? QsWindow.window.screen.name : ""
   readonly property int coverHeight: bar !== null && bar.position === "top" ? Math.ceil(compactH) : 0
   function publishCover() {
-    if (monitorName !== "") coverFile.setText(String(coverHeight) + "\n")
+    if (monitorName !== "" && coverFile.path !== "") coverFile.setText(String(coverHeight) + "\n")
   }
   onCoverHeightChanged: publishCover()
-  onMonitorNameChanged: publishCover()
+  // after the file's path has followed the new name
+  onMonitorNameChanged: Qt.callLater(publishCover)
   Timer { id: coverKick; interval: 200; running: true; onTriggered: root.publishCover() }
   FileView {
     id: coverFile
