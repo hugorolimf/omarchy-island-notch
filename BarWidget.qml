@@ -568,14 +568,29 @@ BarWidget {
   property real notchW: 0
   property real notchH: barH
   property real notchR: u(10)
-  Behavior on notchW { NumberAnimation { id: wAnim; duration: root.morphMs; easing.type: Easing.Bezier; easing.bezierCurve: root.ease } }
+  // Going back to rest is its own move: the content fades first, then the
+  // body folds away on a soft in-out curve. The opening curve starts so fast
+  // that the body would swallow the content before it had faded.
+  property bool closing: false
+  Behavior on notchW {
+    SequentialAnimation {
+      PauseAnimation { duration: root.closing ? 130 : 0 }
+      NumberAnimation { id: wAnim; duration: root.closing ? 420 : root.morphMs; easing.type: root.closing ? Easing.InOutCubic : Easing.Bezier; easing.bezierCurve: root.ease }
+    }
+  }
   // Dictation drops in with a slight overshoot (it replaces voxtype's own
   // pill and should be noticed); everything else uses the anatomy curve.
-  Behavior on notchH { NumberAnimation { id: hAnim; duration: root.morphMs; easing.type: root.view === "dictation" ? Easing.OutBack : Easing.Bezier; easing.overshoot: 1.4; easing.bezierCurve: root.ease } }
+  Behavior on notchH {
+    SequentialAnimation {
+      PauseAnimation { duration: root.closing ? 130 : 0 }
+      NumberAnimation { id: hAnim; duration: root.closing ? 420 : root.morphMs; easing.type: root.closing ? Easing.InOutCubic : root.view === "dictation" ? Easing.OutBack : Easing.Bezier; easing.overshoot: 1.4; easing.bezierCurve: root.ease }
+    }
+  }
   Behavior on notchR { NumberAnimation { duration: root.morphMs; easing.type: Easing.Bezier; easing.bezierCurve: root.ease } }
 
   // Targets are pushed once the overlay is mapped, so the first morph is seen.
   function pushTargets() {
+    closing = view === "idle" && targetW < notchW
     notchW = targetW
     notchH = targetH
     notchR = targetR
@@ -1004,6 +1019,7 @@ BarWidget {
     property string key: ""
     readonly property bool active: root.view === key
     property int inPause: active ? 150 : 0
+    readonly property int fadeOut: root.view === "idle" ? 150 : 300
     anchors.horizontalCenter: parent.horizontalCenter
     anchors.top: parent.top
     opacity: active ? 1 : 0
@@ -1011,7 +1027,7 @@ BarWidget {
     Behavior on opacity {
       SequentialAnimation {
         PauseAnimation { duration: inPause }
-        NumberAnimation { duration: 300; easing.type: Easing.Bezier; easing.bezierCurve: root.ease }
+        NumberAnimation { duration: active ? 300 : fadeOut; easing.type: Easing.Bezier; easing.bezierCurve: root.ease }
       }
     }
     // content drops in from just above as the notch opens up under it
