@@ -371,17 +371,27 @@ BarWidget {
   }
 
   // Reply typed in a pinned notification (Glass Notifications passes it to
-  // the sender as an inline reply).
+  // the sender as an inline reply). The text never goes in a process's
+  // arguments, which other accounts can read: it goes through stdin into a
+  // private file under $XDG_RUNTIME_DIR, and only that path is passed on.
   property bool replySent: false
   property bool replyFailed: false
   function sendReply(text) {
     var t = String(text || "").trim()
     if (!t || !notif || replySent) return
-    replyProc.command = ["omarchy-shell", "notifications", "reply", String(notif.uid || ""), t]
+    replyProc.command = ["sh", "-c",
+      "umask 077; d=\"${XDG_RUNTIME_DIR:?}/island-notch\"; mkdir -p \"$d\" && chmod 700 \"$d\" || exit 1; "
+      + "f=$(mktemp \"$d/reply.XXXXXX\") || exit 1; cat > \"$f\"; "
+      + "r=$(omarchy-shell notifications replyFile \"$1\" \"$f\"); rm -f \"$f\"; printf '%s' \"$r\"",
+      "island-reply", String(notif.uid || "")]
+    replyText = t
     replyProc.running = true
   }
+  property string replyText: ""
   Process {
     id: replyProc
+    stdinEnabled: true
+    onStarted: { write(root.replyText); stdinEnabled = false; root.replyText = "" }
     stdout: StdioCollector {
       onStreamFinished: {
         var ok = String(text || "").trim() === "ok"
