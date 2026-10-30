@@ -219,7 +219,6 @@ BarWidget {
   readonly property string claudeLine: claudeState === "waiting" ? tr("Esperando você")
     : claudeState === "done" ? tr("Pronto") + " · " + claudeTitle
     : claudeSteps.length > 0 ? claudeStep(claudeSteps[claudeSteps.length - 1]) : tr("Pensando…")
-  readonly property color claudeColor: claudeState === "waiting" ? amber : claudeState === "done" ? green : hi
 
   // ---- media (MPRIS, signal driven)
   readonly property var players: Mpris.players ? Mpris.players.values : []
@@ -1486,15 +1485,24 @@ BarWidget {
     }
   }
 
+  // Claude's own mark: breathes while it works, still while it waits for
+  // you, and gives way to a check when the turn is done.
   component ClaudeMark: Item {
     implicitWidth: root.u(14)
     implicitHeight: root.u(14)
-    PulseDot {
+    ClaudeLogo {
+      id: claudeLogoMark
       anchors.centerIn: parent
       visible: root.claudeState !== "done"
-      size: root.u(6)
-      color: root.claudeColor
-      running: root.claudeState === "working" && (root.view === "claude" || root.view === "claudeX")
+      size: root.u(14)
+      readonly property bool working: root.claudeState === "working" && (root.view === "claude" || root.view === "claudeX")
+      SequentialAnimation on opacity {
+        running: claudeLogoMark.working
+        loops: Animation.Infinite
+        alwaysRunToEnd: true
+        NumberAnimation { to: 0.35; duration: 700; easing.type: Easing.InOutSine }
+        NumberAnimation { to: 1; duration: 700; easing.type: Easing.InOutSine }
+      }
     }
     StrokeIcon {
       anchors.centerIn: parent
