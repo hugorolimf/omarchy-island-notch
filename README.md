@@ -56,6 +56,12 @@ you reply right there.
 
 ![Notification with an inline reply](assets/notification.gif)
 
+**Claude Code, live** (with the hook below): what the session is doing right now,
+amber when it waits for you, a check when it's done; `+2` counts the other sessions.
+A sample session here, not a real one.
+
+![A Claude Code session in the notch](assets/claude.gif)
+
 **Volume and brightness**, in place of a separate on-screen card.
 
 ![Volume and brightness](assets/hud.gif)
