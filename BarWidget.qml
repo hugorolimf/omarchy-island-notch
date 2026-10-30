@@ -1262,7 +1262,7 @@ BarWidget {
     onTriggered: root.claudeNow = Date.now()
     onRunningChanged: root.claudeNow = Date.now()
   }
-  onClaudeSessionsChanged: claudeNow = Date.now()
+  onClaudeSessionsChanged: Qt.callLater(function() { root.claudeNow = Date.now() })  // not from inside claudeLive's own update
 
   // The session's terminal, as claude-notch-notify does it: its tmux pane
   // (window and pane selected, then the window of a client attached to that
@@ -2394,10 +2394,10 @@ BarWidget {
               sourceSize.height: 128
               onStatusChanged: if (status === Image.Error && root.iphoneIconTries < 2) iphoneIconRetry.restart()
             }
-            // level with the sender's line, like the app name beside it
+            // centred on the text beside it (sender and message together)
             ClaudeLogo {
               anchors.horizontalCenter: parent.horizontalCenter
-              y: iphoneText.y + senderLabel.y + (senderLabel.height - height) / 2 - appTile.y
+              y: Math.round(iphoneText.y + (iphoneText.height - height) / 2 - appTile.y)
               visible: root.cardClaude
               size: root.u(19)
             }
