@@ -303,6 +303,7 @@ BarWidget {
     if (notif) shownNotif = notif
     replySent = false
     replyFailed = false
+    if (tabWanted) setTabBind(true)  // re-arms the 30 s guard for a new one
   }
   onShownNotifChanged: { iphoneIconTries = 0; loadIphoneIcon() }
   Timer {
@@ -323,8 +324,87 @@ BarWidget {
   property bool notifPinned: false
   // as shownNotif: the buttons stay while a pinned notification folds away
   property bool shownPinned: false
-  onNotifPinnedChanged: if (notif) shownPinned = notifPinned
+  onNotifPinnedChanged: {
+    if (notif) shownPinned = notifPinned
+    if (!notifPinned) notifKeys = false
+  }
   readonly property bool notifOpen: notifPinned || (hoverExpanded && activity === "notif")
+
+  // Keyboard: while a notification is up, Tab opens it as a click does (Tab
+  // is bound in Hyprland only meanwhile; the rest of the time it is the
+  // apps') and Tab again folds it back, as Esc. Open, the arrows walk its
+  // buttons, ↑ from the first one goes to the reply field and ↓ back, Enter
+  // acts on the selected one.
+  property bool notifKeys: false        // the selection ring shows
+  property bool notifReplyFocus: false
+  property int notifSel: 0
+  readonly property bool notifHasOpen: shownNotif !== null && !!(shownNotif.open || (shownNotif.kind !== "iphone" && (shownNotif.app || shownNotif.desktopEntry)))
+  readonly property int notifActionCount: shownNotif && shownNotif.actions ? shownNotif.actions.length : 0
+  readonly property int notifButtonCount: (notifHasOpen ? 1 : 0) + notifActionCount + 1
+  function notifRing(i) { return notifKeys && notifPinned && !notifReplyFocus && notifSel === i }
+
+  readonly property bool tabWanted: activity === "notif" && !notifPinned
+  onTabWantedChanged: setTabBind(tabWanted)
+  // One entry per screen in a Lua table, so two notches don't unbind each
+  // other; a shell that dies with Tab bound gives it back after 30 s.
+  function setTabBind(on) {
+    var key = "island_tab[" + JSON.stringify(screenName || "?") + "]"
+    Quickshell.execDetached(["hyprctl", "eval", on
+      ? "island_tab = island_tab or {} "
+        + "if next(island_tab) == nil then hl.bind('TAB', function() hl.exec_cmd('omarchy-shell -q io.github.hugorolimf.island pinKeys') end, { description = 'Island Notch: open the notification' }) end "
+        + key + " = true "
+        + "island_tab_gen = (island_tab_gen or 0) + 1 local g = island_tab_gen "
+        + "hl.timer(function() if island_tab_gen == g and next(island_tab) then island_tab = {} hl.unbind('TAB') end end, { timeout = 30000, type = 'oneshot' })"
+      : "if island_tab and " + key + " then " + key + " = nil if next(island_tab) == nil then hl.unbind('TAB') end end"])
+  }
+
+  function pinNotificationByKeys() {
+    if (!notif) return
+    notifSel = 0
+    pinNotification()
+    notifKeys = true
+    focusPrime = true
+    primeTimer.restart()
+  }
+
+  // Keys of a pinned notification (on keyCatcher; the reply field hands ↓
+  // over and folds on Tab too). The first arrow after a click only shows the
+  // ring.
+  function notifKey(key) {
+    if (!notifPinned || !shownNotif) return false
+    var n = notifButtonCount
+    if (key === Qt.Key_Tab) {
+      unpinNotification()
+    } else if (key === Qt.Key_Right || key === Qt.Key_Down) {
+      if (notifKeys) notifSel = (notifSel + 1) % n
+      notifKeys = true
+    } else if (key === Qt.Key_Up && notifSel === 0 && replyBox.visible) {
+      replyInput.forceActiveFocus()
+    } else if (key === Qt.Key_Left || key === Qt.Key_Up) {
+      if (notifKeys) notifSel = (notifSel + n - 1) % n
+      notifKeys = true
+    } else if (key === Qt.Key_Return || key === Qt.Key_Enter) {
+      activateNotifButton(notifSel)
+    } else {
+      return false
+    }
+    return true
+  }
+
+  function notifFocusButtons() {
+    notifSel = 0
+    notifKeys = true
+    keyCatcher.forceActiveFocus()
+  }
+
+  function activateNotifButton(i) {
+    var n = shownNotif
+    if (!n) return
+    var a = i - (notifHasOpen ? 1 : 0)
+    if (notifHasOpen && i === 0) focusNotificationApp()
+    else if (a >= 0 && a < notifActionCount) { Quickshell.execDetached(n.actions[a].open); dismissNotification() }
+    else dismissNotification()
+  }
 
   // ---- on-screen indicators (volume, brightness, mic, keyboard), sent by
   // Osd.qml for every `omarchy-osd`. A level shows as icon + bar + number;
@@ -821,6 +901,7 @@ BarWidget {
   // Stop the children explicitly: a reload must not leave a status
   // follower behind.
   Component.onDestruction: {
+    if (tabWanted) setTabBind(false)
     voxProc.running = false
     recWatch.running = false
     claudeWatch.running = false
@@ -1163,6 +1244,14 @@ BarWidget {
       return "ok"
     }
 
+    // Tab while a notification is up (bound only then): pin it for the keyboard.
+    function pinKeys(): string {
+      var items = root.bar && typeof root.bar.moduleWidgets === "function" ? root.bar.moduleWidgets(root.moduleName) : [root]
+      if (!items || items.length === 0) items = [root]
+      for (var i = 0; i < items.length; i++) if (items[i] && items[i].notif) { items[i].pinNotificationByKeys(); return "ok" }
+      return "none"
+    }
+
     // Pin the notification on screen (as a click on it does).
     function pin(): string {
       var items = root.bar && typeof root.bar.moduleWidgets === "function" ? root.bar.moduleWidgets(root.moduleName) : [root]
@@ -1347,13 +1436,14 @@ BarWidget {
     id: pill
     property string label: ""
     property bool accent: false
+    property bool selected: false  // keyboard selection
     signal activated()
     width: pillText.implicitWidth + root.u(18)
     height: root.u(22)
     radius: height / 2
-    color: pillArea.containsMouse ? Qt.rgba(1, 1, 1, 0.09) : (accent ? Qt.rgba(1, 1, 1, 0.05) : "transparent")
-    border.width: 0.6
-    border.color: Qt.rgba(root.hi.r, root.hi.g, root.hi.b, accent ? 0.5 : 0.25)
+    color: pillArea.containsMouse || selected ? Qt.rgba(1, 1, 1, 0.09) : (accent ? Qt.rgba(1, 1, 1, 0.05) : "transparent")
+    border.width: selected ? 1.2 : 0.6
+    border.color: Qt.rgba(root.hi.r, root.hi.g, root.hi.b, selected ? 0.9 : accent ? 0.5 : 0.25)
     Behavior on color { ColorAnimation { duration: root.fadeMs } }
     Text {
       id: pillText
@@ -1383,14 +1473,17 @@ BarWidget {
       label: root.notifActionLabel
       accent: true
       // an iPhone notification only has the phone's own actions
-      visible: root.shownNotif !== null && (root.shownNotif.open || (root.shownNotif.kind !== "iphone" && (root.shownNotif.app || root.shownNotif.desktopEntry)))
+      visible: root.notifHasOpen
+      selected: root.notifRing(0)
       onActivated: root.focusNotificationApp()
     }
     Repeater {
       model: root.shownNotif && root.shownNotif.actions ? root.shownNotif.actions : []
       delegate: ActionPill {
         required property var modelData
+        required property int index
         label: String(modelData.label).toUpperCase()
+        selected: root.notifRing((root.notifHasOpen ? 1 : 0) + index)
         onActivated: {
           Quickshell.execDetached(modelData.open)
           root.dismissNotification()
@@ -1399,6 +1492,7 @@ BarWidget {
     }
     ActionPill {
       label: root.tr("FECHAR")
+      selected: root.notifRing(root.notifButtonCount - 1)
       onActivated: root.dismissNotification()
     }
   }
@@ -1649,7 +1743,7 @@ BarWidget {
     WlrLayershell.layer: WlrLayer.Top
     WlrLayershell.keyboardFocus: root.cardName !== ""
       ? (root.focusPrime ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.OnDemand)
-      : root.notifPinned || root.mediaPinned ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
+      : root.notifPinned || root.mediaPinned ? (root.focusPrime ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.OnDemand) : WlrKeyboardFocus.None
     // input only on the notch body
     mask: Region { item: body }
 
@@ -1718,6 +1812,7 @@ BarWidget {
         id: keyCatcher
         focus: true
         Keys.onEscapePressed: { root.closeCard(); root.unpinNotification(); root.mediaPinned = false; root.hoverExpanded = false }
+        Keys.onPressed: function(event) { if (root.notifKey(event.key)) event.accepted = true }
       }
 
       // ---------------- compact views
@@ -2139,6 +2234,9 @@ BarWidget {
                 Keys.onReturnPressed: root.sendReply(text)
                 Keys.onEnterPressed: root.sendReply(text)
                 Keys.onEscapePressed: root.unpinNotification()
+                Keys.onDownPressed: root.notifFocusButtons()
+                Keys.onTabPressed: root.unpinNotification()
+                onActiveFocusChanged: root.notifReplyFocus = activeFocus
                 Text {
                   textFormat: Text.PlainText
                   anchors.verticalCenter: parent.verticalCenter
