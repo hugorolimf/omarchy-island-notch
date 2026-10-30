@@ -26,3 +26,12 @@ function unregister(item) {
   if (i !== -1) instances.splice(i, 1)
   elect()
 }
+
+// The leader, for NotificationService.qml: it hands notifications over here,
+// in process, so what they say never sits in a process's arguments. (A
+// replacement bar such as Island Bar gives its widgets no handle on services,
+// so the service reaches the widgets instead.) null while no notch is up.
+function leaderItem() {
+  instances = instances.filter(alive)
+  return instances.length > 0 ? instances[0] : null
+}

@@ -16,7 +16,7 @@
 # id of a desktop notification ({"id": 17, "at": <ms>}), such as "needs your
 # permission": once the session moves on (a tool finished, a new prompt, the
 # turn or the session ended) that notification is closed (as its sender, over
-# D-Bus) and dropped from the notch and from Glass Notifications' history.
+# D-Bus) and dropped from the notch and from the notifications history.
 #
 # Always exits 0 at once and prints nothing, so it never changes what Claude does.
 
@@ -144,7 +144,7 @@ def retire_notice(sid):
         return
     if nid <= 0:
         return
-    # Glass Notifications files each one as history/<timestamp>-<id>.json;
+    # The notifications history files each one as history/<timestamp>-<id>.json;
     # ids start over with the shell, so only a Claude one sent since then.
     state = os.environ.get("XDG_STATE_HOME") or os.path.expanduser("~/.local/state")
     hist = os.path.join(state, "omarchy", "notifications", "history")

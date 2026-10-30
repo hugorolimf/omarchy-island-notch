@@ -524,7 +524,7 @@ BarWidget {
     return tr("ABRIR")
   }
 
-  // Reply typed in a pinned notification (Glass Notifications passes it to
+  // Reply typed in a pinned notification (NotificationService.qml passes it to
   // the sender as an inline reply). The text never goes in a process's
   // arguments, which other accounts can read: it goes through stdin into a
   // private file under $XDG_RUNTIME_DIR, and only that path is passed on.
@@ -1207,6 +1207,47 @@ BarWidget {
       "bash", String(s.pid || 0), String(s.tmuxPane || ""), String(s.tmuxSocket || "")]))
   }
 
+  // A notification for the notch on the focused monitor: from the `notify` IPC
+  // (scripts, claude-hook.py) or, in process, from NotificationService.qml
+  // (through Shared.leaderItem()).
+  function deliverNotification(n) {
+    var items = root.bar && typeof root.bar.moduleWidgets === "function" ? root.bar.moduleWidgets(root.moduleName) : [root]
+    if (!items || items.length === 0) items = [root]
+    var focused = Hyprland.focusedMonitor ? Hyprland.focusedMonitor.name : ""
+    var target = items[0]
+    for (var j = 0; j < items.length; j++) if (items[j] && items[j].screenName === focused) target = items[j]
+    target.showNotification({
+      app: String(n.app || ""),
+      title: root.plain(n.title),
+      body: root.plain(n.body),
+      icon: String(n.icon || ""),
+      desktopEntry: String(n.desktopEntry || ""),
+      copy: n.copy === undefined || n.copy === null ? "" : String(n.copy),
+      open: Array.isArray(n.open) ? n.open.map(function(a) { return String(a) }) : null,
+      kind: String(n.kind || ""),
+      uid: String(n.uid || ""),
+      urgent: n.urgent === true,
+      openLabel: String(n.openLabel || ""),
+      reply: n.reply === true,
+      replyHint: String(n.replyHint || ""),
+      actions: Array.isArray(n.actions) ? n.actions.filter(function(a) { return a && a.label && Array.isArray(a.open) }).slice(0, 2)
+        .map(function(a) { return { label: String(a.label), open: a.open.map(function(x) { return String(x) }) } }) : []
+    })
+    return "ok"
+  }
+
+  // Super+, (dismissOne) and Super+Shift+, (dismissAll), through this
+  // plugin's notification server (NotificationService.qml).
+  function dismissNotifications(one) {
+    var items = root.bar && typeof root.bar.moduleWidgets === "function" ? root.bar.moduleWidgets(root.moduleName) : [root]
+    if (!items || items.length === 0) items = [root]
+    for (var i = 0; i < items.length; i++) {
+      if (!items[i] || !items[i].notif) continue
+      items[i].dismissNotification()
+      if (one) return
+    }
+  }
+
   // =====================================================================
   // IPC: omarchy-shell io.github.hugorolimf.island card weather | card close
 
@@ -1218,29 +1259,7 @@ BarWidget {
       var n
       try { n = JSON.parse(json) } catch (e) { return "bad json" }
       if (!n || typeof n !== "object") return "bad json"
-      var items = root.bar && typeof root.bar.moduleWidgets === "function" ? root.bar.moduleWidgets(root.moduleName) : [root]
-      if (!items || items.length === 0) items = [root]
-      var focused = Hyprland.focusedMonitor ? Hyprland.focusedMonitor.name : ""
-      var target = items[0]
-      for (var j = 0; j < items.length; j++) if (items[j] && items[j].screenName === focused) target = items[j]
-      target.showNotification({
-        app: String(n.app || ""),
-        title: root.plain(n.title),
-        body: root.plain(n.body),
-        icon: String(n.icon || ""),
-        desktopEntry: String(n.desktopEntry || ""),
-        copy: n.copy === undefined || n.copy === null ? "" : String(n.copy),
-        open: Array.isArray(n.open) ? n.open.map(function(a) { return String(a) }) : null,
-        kind: String(n.kind || ""),
-        uid: String(n.uid || ""),
-        urgent: n.urgent === true,
-        openLabel: String(n.openLabel || ""),
-        reply: n.reply === true,
-        replyHint: String(n.replyHint || ""),
-        actions: Array.isArray(n.actions) ? n.actions.filter(function(a) { return a && a.label && Array.isArray(a.open) }).slice(0, 2)
-          .map(function(a) { return { label: String(a.label), open: a.open.map(function(x) { return String(x) }) } }) : []
-      })
-      return "ok"
+      return root.deliverNotification(n)
     }
 
     // omarchy-shell io.github.hugorolimf.island hud '{"key":"volume","value":0.4}' ("{}" hides)

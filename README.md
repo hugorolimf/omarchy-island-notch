@@ -21,8 +21,9 @@ fold back into it.
   (voxtype), in place of a separate pill.
 - 🔔 **Notifications.** Each one drops in from the notch in a big card, long enough to
   read, then shrinks to a one-line mini view. Hover to expand, click to keep it open
-  with its actions (reply, open, copy a code, close). Needs a notifications plugin
-  that hands them over (see below).
+  with its actions (reply, open, copy a code, close). It is its own notification
+  server: history (read by [Island Inbox](https://github.com/hugorolimf/omarchy-island-inbox)),
+  Do Not Disturb and Omarchy's notification keys (Super+, and friends) all work.
 - ✳️ **Claude Code, live.** While a session works, the notch shows its state (working,
   waiting for you, done) and the current step as it rolls by: "Edits BarWidget.qml",
   "Runs: npm test", "Reads README.md". Several sessions: the latest one, "+N" for the
@@ -75,8 +76,13 @@ you reply right there.
 
 ```bash
 omarchy plugin add https://github.com/hugorolimf/omarchy-island-notch --enable
+omarchy plugin disable omarchy.notifications
 omarchy-restart-shell
 ```
+
+The second line hands notifications over to the notch: it only serves them while
+no other notifications service is on (otherwise each one would show twice), so
+until then Omarchy's own cards keep showing them.
 
 It takes the centre of the bar. Works with Omarchy's own bar and with
 [Island Bar](https://github.com/hugorolimf/omarchy-bar).
@@ -89,7 +95,8 @@ omarchy-shell io.github.hugorolimf.island hud '{"key":"volume","value":0.4}'
 omarchy-shell io.github.hugorolimf.island card weather
 ```
 
-`notify` is how a notifications plugin (or a script) shows something in the notch;
+`notify` is how a script shows something in the notch (real notifications arrive on
+their own);
 `hud` is what the bundled on-screen display sends; `card weather` opens the weather
 card.
 
@@ -124,7 +131,7 @@ If a notifier hook of yours leaves a notification's id in
 `$XDG_RUNTIME_DIR/island-notch/claude/<session>.notif` (`{"id": 17, "at": <ms>}`),
 for "Claude needs your permission", the hook takes that notification back once the
 session moves on (you answered in the terminal): it is closed over D-Bus, leaves the
-notch and Glass Notifications' history.
+notch and the notifications history.
 
 ## Files it writes
 
@@ -133,9 +140,15 @@ notch and Glass Notifications' history.
 - `~/.local/state/omarchy/io.github.hugorolimf.island/cover-<monitor>`: the height
   the notch takes at the top of each monitor, for window managers that keep windows
   clear of it.
+- `~/.local/state/omarchy/notifications/history/` and `images/`: the notifications
+  history, one JSON file each (the newest 100) plus copies of their images, and
+  `~/.local/state/omarchy/notifications.json` (Do Not Disturb). The same places
+  Omarchy's own notifications use, so history carries over both ways. Folders 0700,
+  files 0600 (older ones are tightened at start); what a notification says is written
+  through stdin, never put in a command line, and reaches the notch in process.
 - `$XDG_RUNTIME_DIR/island-notch/reply.*`: an inline reply on its way to the
-  notifications plugin, in a private (0600) file inside a 0700 folder, removed as
-  soon as it is read. The reply text never goes in a command line.
+  sender, in a private (0600) file inside a 0700 folder, removed as soon as it is
+  read. The reply text never goes in a command line.
 - `$XDG_RUNTIME_DIR/island-notch/claude/<session>.json` (written by the Claude Code
   hook, read by the notch): one private (0600) file per session inside a 0700 folder,
   written to a temporary file and renamed. Removed when the session ends, or by the
@@ -152,6 +165,7 @@ notch and Glass Notifications' history.
 
 ```bash
 omarchy plugin remove io.github.hugorolimf.island
+omarchy plugin enable omarchy.notifications
 omarchy-restart-shell
 rm -rf ~/.cache/island-notch ~/.local/state/omarchy/io.github.hugorolimf.island
 ```
@@ -159,11 +173,13 @@ rm -rf ~/.cache/island-notch ~/.local/state/omarchy/io.github.hugorolimf.island
 If you added the Claude Code hook, take its entries out of `~/.claude/settings.json`
 and delete `~/.local/bin/claude-notch-session`.
 
-Omarchy's own on-screen display comes back.
+Omarchy's own on-screen display and notifications come back (the history stays).
 
 ## Credits
 
-The on-screen display model (`OsdModel.js`) and IPC are Omarchy's `omarchy.osd` by
+The on-screen display model (`OsdModel.js`) and IPC are Omarchy's `omarchy.osd`, and
+the notification server (`NotificationService.qml`, `NotificationLogic.js`) and its
+`notifications` IPC come from Omarchy's `omarchy.notifications`, both by
 David Heinemeier Hansson and the [Omarchy](https://github.com/basecamp/omarchy)
 contributors (MIT). Weather data from [Open-Meteo](https://open-meteo.com) (and
 [wttr.in](https://wttr.in) to find your location when Omarchy has none).
