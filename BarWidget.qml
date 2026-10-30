@@ -2379,7 +2379,7 @@ BarWidget {
             width: root.u(34)
             height: width
             radius: root.u(8)
-            color: appImage.status === Image.Ready ? "transparent" : root.faint
+            color: appImage.status === Image.Ready || root.cardClaude ? "transparent" : root.faint
             Image {
               id: appImage
               anchors.fill: parent
