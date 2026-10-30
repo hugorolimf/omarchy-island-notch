@@ -300,6 +300,7 @@ BarWidget {
   // so its text leaves with the closing animation instead of blanking first.
   property var shownNotif: null
   onNotifChanged: {
+    if (!notif) { notifPeek = false; peekTimer.stop() }
     if (notif) shownNotif = notif
     replySent = false
     replyFailed = false
@@ -328,7 +329,10 @@ BarWidget {
     if (notif) shownPinned = notifPinned
     if (!notifPinned) notifKeys = false
   }
-  readonly property bool notifOpen: notifPinned || (hoverExpanded && activity === "notif")
+  // A new notification arrives in the big card, long enough to read, then
+  // folds to its one-line form; hover or a click open the card again.
+  property bool notifPeek: false
+  readonly property bool notifOpen: notifPinned || notifPeek || (hoverExpanded && activity === "notif")
 
   // Keyboard: while a notification is up, Tab opens it as a click does (Tab
   // is bound in Hyprland only meanwhile; the rest of the time it is the
@@ -485,10 +489,17 @@ BarWidget {
     copiedTimer.stop()
     notifTimer.interval = n.urgent ? 20000 : n.copy ? 12000 : n.kind === "iphone" ? 9000 : 7000
     if (!pinned) notifTimer.restart()
+    if (!same && !pinned) { notifPeek = true; peekTimer.restart() }
+  }
+  Timer {
+    id: peekTimer
+    interval: 3500
+    onTriggered: root.notifPeek = false
   }
 
   function pinNotification() {
     if (!notif || notifPinned) return
+    notifPeek = false
     notifPinned = true
     notifTimer.stop()
   }
@@ -698,7 +709,7 @@ BarWidget {
     if (view === "screenX") return u(280)
     if (view === "claudeX") return u(380)
     if (view === "claude") return u(300)
-    if (view === "iphone") return u(372)
+    if (view === "iphone") return u(380)
     if (view === "iphoneMini") return iphoneMiniRow.implicitWidth + u(32)
     if (view === "notifX") return Math.max(u(300), notifRowX.implicitWidth + u(32))
     if (view === "notif") return notifRow.implicitWidth + u(32)
@@ -722,8 +733,7 @@ BarWidget {
     return compactH
   }
   readonly property real targetR: u(view === "mediaX" ? 26
-    : (view === "card" || view === "screenX" || view === "claudeX") ? 20
-    : view === "iphone" ? 18
+    : (view === "card" || view === "screenX" || view === "claudeX" || view === "iphone") ? 20
     : view === "dictation" || view === "notifX" ? 14 : 10)
 
   property real notchW: 0
@@ -2118,7 +2128,7 @@ BarWidget {
       // sent it in bold, app and time on the right, the text below in sans.
       Page {
         key: "iphone"
-        width: root.u(372) - root.u(36)
+        width: root.u(380) - root.u(36)
         height: iphoneCard.implicitHeight
 
         Item {

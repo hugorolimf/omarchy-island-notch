@@ -19,7 +19,7 @@ fold back into it.
   recorder runs; hover for a stop button.
 - 🎙️ **Dictation.** Listening and transcribing states for Omarchy's voice dictation
   (voxtype), in place of a separate pill.
-- 🔔 **Notifications.** Each one drops in from the notch, expanded long enough to
+- 🔔 **Notifications.** Each one drops in from the notch in a big card, long enough to
   read, then shrinks to a one-line mini view. Hover to expand, click to keep it open
   with its actions (reply, open, copy a code, close). Needs a notifications plugin
   that hands them over (see below).
