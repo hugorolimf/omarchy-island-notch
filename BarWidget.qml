@@ -2376,7 +2376,8 @@ BarWidget {
           Rectangle {
             id: appTile
             y: root.u(10)
-            width: root.u(34)
+            // Claude's mark sits beside the name, as in the one-line view
+            width: root.cardClaude ? root.u(19) : root.u(34)
             height: width
             radius: root.u(8)
             color: appImage.status === Image.Ready || root.cardClaude ? "transparent" : root.faint
@@ -2393,8 +2394,10 @@ BarWidget {
               sourceSize.height: 128
               onStatusChanged: if (status === Image.Error && root.iphoneIconTries < 2) iphoneIconRetry.restart()
             }
+            // level with the sender's line, like the app name beside it
             ClaudeLogo {
-              anchors.centerIn: parent
+              anchors.horizontalCenter: parent.horizontalCenter
+              y: iphoneText.y + senderLabel.y + (senderLabel.height - height) / 2 - appTile.y
               visible: root.cardClaude
               size: root.u(19)
             }
