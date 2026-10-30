@@ -3,8 +3,9 @@
 # Island Notch
 
 **A Dynamic Island for the Omarchy bar.**
-Music, screen recording, dictation, notifications and the volume and brightness
-indicators grow out of a notch in the middle of the bar, and fold back into it.
+Music, screen recording, dictation, notifications, Claude Code at work and the
+volume and brightness indicators grow out of a notch in the middle of the bar, and
+fold back into it.
 
 ![Island Notch](preview.png)
 
@@ -22,6 +23,11 @@ indicators grow out of a notch in the middle of the bar, and fold back into it.
   read, then shrinks to a one-line mini view. Hover to expand, click to keep it open
   with its actions (reply, open, copy a code, close). Needs a notifications plugin
   that hands them over (see below).
+- ✳️ **Claude Code, live.** While a session works, the notch shows its state (working,
+  waiting for you, done) and the current step as it rolls by: "Edits BarWidget.qml",
+  "Runs: npm test", "Reads README.md". Several sessions: the latest one, "+N" for the
+  others. Hover for the session's title, project and last three steps; a click
+  takes you to its terminal (and tmux pane). Needs a Claude Code hook (below).
 - 🔊 **Volume, brightness, microphone, keyboard.** Omarchy's on-screen indicators
   show in the notch instead of a card of their own; enabling this plugin takes over
   `omarchy.osd`, disabling it gives it back.
@@ -87,6 +93,39 @@ omarchy-shell io.github.hugorolimf.island card weather
 `hud` is what the bundled on-screen display sends; `card weather` opens the weather
 card.
 
+## Claude Code
+
+The live session comes from a small hook, `claude-hook.py` in this folder. The
+plugin never edits your Claude Code settings: copy the hook somewhere stable and
+register it yourself.
+
+```bash
+install -m 755 ~/.config/omarchy/plugins/io.github.hugorolimf.island/claude-hook.py ~/.local/bin/claude-notch-session
+```
+
+Then, in `~/.claude/settings.json`, add this entry to each of `SessionStart`,
+`UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `Notification`, `Stop`,
+`SubagentStop` and `SessionEnd` under `"hooks"` (next to any hooks already there):
+
+```json
+{ "hooks": [{ "type": "command", "command": "~/.local/bin/claude-notch-session", "timeout": 5 }] }
+```
+
+The hook is Python 3 with no dependencies, prints nothing and always exits at once,
+so it never changes what Claude does. It keeps only what the notch shows: the state,
+each step as the tool and a short target (a file name, a command cut to 40
+characters, a search pattern), the session's title (your `/rename`, else Claude's
+own), the project folder and how to reach its terminal. Never your prompts, tool
+output, file contents or the transcript. "Done" shows for a few seconds after a turn
+ends, then the notch folds away; an empty turn, or Claude Code's own helpers
+finishing, does not flash.
+
+If a notifier hook of yours leaves a notification's id in
+`$XDG_RUNTIME_DIR/island-notch/claude/<session>.notif` (`{"id": 17, "at": <ms>}`),
+for "Claude needs your permission", the hook takes that notification back once the
+session moves on (you answered in the terminal): it is closed over D-Bus, leaves the
+notch and Glass Notifications' history.
+
 ## Files it writes
 
 - `~/.cache/island-notch/`: the weather forecast and detected location (10-minute
@@ -97,12 +136,17 @@ card.
 - `$XDG_RUNTIME_DIR/island-notch/reply.*`: an inline reply on its way to the
   notifications plugin, in a private (0600) file inside a 0700 folder, removed as
   soon as it is read. The reply text never goes in a command line.
+- `$XDG_RUNTIME_DIR/island-notch/claude/<session>.json` (written by the Claude Code
+  hook, read by the notch): one private (0600) file per session inside a 0700 folder,
+  written to a temporary file and renamed. Removed when the session ends, or by the
+  notch once its Claude process is gone. Gone at logout (it is in the runtime dir).
 
 ## Requirements
 
 - Omarchy with the Quattro shell (Quickshell).
 - Optional, each for its own part: an MPRIS player, Omarchy's screen recorder, Omarchy's
-  voice dictation, `wl-copy` (copying codes).
+  voice dictation, `wl-copy` (copying codes), Claude Code with the hook above and
+  `python3` (the live session).
 
 ## Remove
 
@@ -111,6 +155,9 @@ omarchy plugin remove io.github.hugorolimf.island
 omarchy-restart-shell
 rm -rf ~/.cache/island-notch ~/.local/state/omarchy/io.github.hugorolimf.island
 ```
+
+If you added the Claude Code hook, take its entries out of `~/.claude/settings.json`
+and delete `~/.local/bin/claude-notch-session`.
 
 Omarchy's own on-screen display comes back.
 

@@ -27,7 +27,12 @@ BarWidget {
   moduleName: "io.github.hugorolimf.island"
   // Portuguese, or English for every other locale.
   readonly property bool portuguese: Qt.locale().name.indexOf("pt") === 0
-  readonly property var enText: ({"RESPONDER": "REPLY", "ABRIR": "OPEN", "ABRIR APP": "OPEN APP", "ABRIR IPHONE": "OPEN IPHONE", "FECHAR": "CLOSE", "COPIADO": "COPIED", "COPIAR": "COPY", "Gravando": "Recording", "Transcrevendo…": "Transcribing…", "Ditando…": "Dictating…", "Responder…": "Reply…", "GRAVANDO TELA": "RECORDING SCREEN", "PARAR": "STOP", "  ·  agora": "  ·  now", "Lembrete": "Reminder"})
+  readonly property var enText: ({"RESPONDER": "REPLY", "ABRIR": "OPEN", "ABRIR APP": "OPEN APP", "ABRIR IPHONE": "OPEN IPHONE", "FECHAR": "CLOSE", "COPIADO": "COPIED", "COPIAR": "COPY", "Gravando": "Recording", "Transcrevendo…": "Transcribing…", "Ditando…": "Dictating…", "Responder…": "Reply…", "GRAVANDO TELA": "RECORDING SCREEN", "PARAR": "STOP", "  ·  agora": "  ·  now", "Lembrete": "Reminder",
+    "Pensando…": "Thinking…", "Esperando você": "Waiting for you", "Pronto": "Done", "Trabalhando": "Working",
+    "Edita": "Edits", "Escreve": "Writes", "Lê": "Reads", "Roda:": "Runs:", "Busca": "Searches", "Procura": "Finds",
+    "Delega:": "Delegates:", "Abre": "Opens", "Pesquisa": "Looks up", "Atualiza as tarefas": "Updates the to-dos",
+    "Pergunta para você": "Asks you", "Mostra o plano": "Shows the plan", "Usa a skill": "Uses the skill",
+    "Agente terminou:": "Agent done:", "Usa": "Uses"})
   function tr(text) { return portuguese || enText[text] === undefined ? text : enText[text] }
 
   // ---- anatomy tokens
@@ -124,6 +129,64 @@ BarWidget {
   property var srcReminder: null
   readonly property var reminder: leader ? leader.srcReminder : null
   readonly property string reminderLeft: reminder ? formatClock(Math.max(0, reminder.at - nowMs / 1000)) : ""
+
+  // ---- Claude Code sessions: claude-hook.py keeps one private file per
+  // session in $XDG_RUNTIME_DIR/island-notch/claude/ (state, the last steps,
+  // title, project, how to reach its terminal); the leader watches the folder.
+  // The most recently active session shows, the others count as "+N"; the
+  // one on screen stays while it moved in the last 10 s, so two busy sessions
+  // don't take turns at every step.
+  readonly property string claudeDir: Quickshell.env("XDG_RUNTIME_DIR") + "/island-notch/claude"
+  property var srcClaudeSessions: []
+  readonly property var claudeSessions: leader ? leader.srcClaudeSessions : []
+  readonly property int claudeDoneMs: 4500
+  property real claudeNow: Date.now()
+  readonly property var claudeLive: {
+    var now = claudeNow
+    return claudeSessions.filter(function(s) {
+      if (now - (s.updated || 0) > 6 * 3600000) return false  // left behind
+      return s.state === "working" || s.state === "waiting" || (s.state === "done" && now - (s.doneAt || 0) < claudeDoneMs)
+    }).sort(function(a, b) { return (b.updated || 0) - (a.updated || 0) })
+  }
+  property string claudeStickyId: ""
+  readonly property var claudeSession: {
+    var live = claudeLive
+    if (live.length === 0) return null
+    for (var i = 0; i < live.length; i++) {
+      var s = live[i]
+      if (s.id === claudeStickyId && claudeNow - (s.updated || 0) < 10000) return s
+    }
+    return live[0]
+  }
+  readonly property bool claudeActive: claudeSession !== null
+  readonly property int claudeExtra: Math.max(0, claudeLive.length - 1)
+  // What the notch draws: kept while the activity folds away.
+  property var shownClaude: null
+  onClaudeSessionChanged: {
+    if (!claudeSession) return
+    shownClaude = claudeSession
+    var id = String(claudeSession.id)
+    Qt.callLater(function() { root.claudeStickyId = id })  // not from inside the binding's own update
+  }
+  readonly property string claudeState: shownClaude ? String(shownClaude.state) : ""
+  readonly property var claudeSteps: shownClaude && Array.isArray(shownClaude.steps) ? shownClaude.steps : []
+  readonly property string claudeTitle: shownClaude ? String(shownClaude.title || shownClaude.project || "Claude") : ""
+  // tool → verb; the hook keeps only the tool and a short target
+  readonly property var claudeVerbs: ({ "Edit": "Edita", "MultiEdit": "Edita", "NotebookEdit": "Edita", "Write": "Escreve",
+    "Read": "Lê", "Bash": "Roda:", "Grep": "Busca", "Glob": "Procura", "Task": "Delega:", "Agent": "Delega:",
+    "WebFetch": "Abre", "WebSearch": "Pesquisa", "TodoWrite": "Atualiza as tarefas", "AskUserQuestion": "Pergunta para você",
+    "ExitPlanMode": "Mostra o plano", "Skill": "Usa a skill", "_subagentDone": "Agente terminou:" })
+  function claudeStep(st) {
+    if (!st) return ""
+    var verb = claudeVerbs[st.tool]
+    var target = String(st.target || "")
+    var head = verb === undefined ? tr("Usa") + " " + String(st.tool || "") : tr(verb)
+    return head + (target ? " " + target : "")
+  }
+  readonly property string claudeLine: claudeState === "waiting" ? tr("Esperando você")
+    : claudeState === "done" ? tr("Pronto") + " · " + claudeTitle
+    : claudeSteps.length > 0 ? claudeStep(claudeSteps[claudeSteps.length - 1]) : tr("Pensando…")
+  readonly property color claudeColor: claudeState === "waiting" ? amber : claudeState === "done" ? green : hi
 
   // ---- media (MPRIS, signal driven)
   readonly property var players: Mpris.players ? Mpris.players.values : []
@@ -515,6 +578,7 @@ BarWidget {
     : hudActive ? "hud"
     : notifActive ? "notif"
     : screenRecording ? "screen"
+    : claudeActive ? "claude"
     : reminder ? "reminder"
     : mediaActive ? "media" : "idle"
 
@@ -524,7 +588,7 @@ BarWidget {
   property bool hoverExpanded: false
   property real grabClosedAt: 0
   property string grabClosedName: ""
-  readonly property bool expandable: activity === "media" || activity === "screen" || activity === "notif"
+  readonly property bool expandable: activity === "media" || activity === "screen" || activity === "notif" || activity === "claude"
   // compact page key, expanded page key or "card"
   readonly property string view: cardName !== "" ? "card"
     : activity === "notif" ? (notifWide ? (notifOpen ? "iphone" : "iphoneMini") : (notifOpen ? "notifX" : "notif"))
@@ -552,6 +616,8 @@ BarWidget {
     if (view === "card") return cardLoader.item ? cardLoader.item.implicitWidth : u(340)
     if (view === "mediaX") return u(400)
     if (view === "screenX") return u(280)
+    if (view === "claudeX") return u(380)
+    if (view === "claude") return u(300)
     if (view === "iphone") return u(372)
     if (view === "iphoneMini") return iphoneMiniRow.implicitWidth + u(32)
     if (view === "notifX") return Math.max(u(300), notifRowX.implicitWidth + u(32))
@@ -568,6 +634,7 @@ BarWidget {
     if (view === "card") return cardLoader.item ? cardLoader.item.implicitHeight : u(124)
     if (view === "mediaX") return u(168)
     if (view === "screenX") return u(62)
+    if (view === "claudeX") return claudeCol.implicitHeight + u(26)
     if (view === "iphone") return iphoneCard.implicitHeight
     if (view === "notifX") return compactH + u(18) + (shownPinned ? notifActionsX.height + u(10) : 0)
     if (view === "dictation") return barH + u(14)
@@ -575,7 +642,7 @@ BarWidget {
     return compactH
   }
   readonly property real targetR: u(view === "mediaX" ? 26
-    : (view === "card" || view === "screenX") ? 20
+    : (view === "card" || view === "screenX" || view === "claudeX") ? 20
     : view === "iphone" ? 18
     : view === "dictation" || view === "notifX" ? 14 : 10)
 
@@ -756,6 +823,7 @@ BarWidget {
   Component.onDestruction: {
     voxProc.running = false
     recWatch.running = false
+    claudeWatch.running = false
     Shared.unregister(root)
   }
 
@@ -925,6 +993,130 @@ BarWidget {
   }
 
   // =====================================================================
+  // Claude Code: claude-hook.py writes $XDG_RUNTIME_DIR/island-notch/claude/
+  // <session>.json on every step; inotify tells the leader when to read the
+  // folder again. Everything goes through those private files, nothing
+  // through a command line.
+
+  function claudeScan() {
+    if (!isLeader) return
+    claudeKick.restart()
+  }
+
+  Process {
+    id: claudeWatch
+    command: ["setpriv", "--pdeathsig", "TERM", "sh", "-c",
+      "umask 077; mkdir -p \"$1\" || exit 1; exec inotifywait -m -q -e close_write,moved_to,delete \"$1\"", "sh", root.claudeDir]
+    running: root.isLeader
+    stdout: SplitParser { onRead: function(line) { root.claudeScan() } }
+    onRunningChanged: if (running) root.claudeScan()
+    onExited: if (root.isLeader) claudeWatchRetry.restart()
+  }
+
+  Timer {
+    id: claudeWatchRetry
+    interval: 15000
+    onTriggered: claudeWatch.running = root.isLeader
+  }
+
+  // Bursts of steps are read once.
+  Timer {
+    id: claudeKick
+    interval: 120
+    onTriggered: {
+      if (claudeRead.running) { restart(); return }
+      claudeRead.running = true
+    }
+  }
+
+  // One line per session: "<interrupted>\t<json>". A session whose Claude
+  // process is gone is removed; one that is busy but whose transcript ends
+  // on "[Request interrupted by user]" (Esc sends no hook) reads as idle.
+  Process {
+    id: claudeRead
+    command: ["sh", "-c",
+      "cd \"$1\" 2>/dev/null || exit 0\n" +
+      "for f in *.json; do\n" +
+      "  [ -f \"$f\" ] || continue\n" +
+      "  s=$(head -c 32768 -- \"$f\")\n" +
+      "  pid=${s#*\\\"pid\\\":}; pid=${pid%%[!0-9]*}\n" +
+      "  if [ -n \"$pid\" ] && [ \"$pid\" != 0 ] && [ ! -d \"/proc/$pid\" ]; then rm -f -- \"$f\" \"${f%.json}.notif\"; continue; fi\n" +
+      "  stop=0\n" +
+      "  case $s in *'\"state\":\"working\"'*|*'\"state\":\"waiting\"'*)\n" +
+      "    t=${s#*\\\"transcript\\\":\\\"}\n" +
+      "    if [ \"$t\" != \"$s\" ]; then t=${t%%\\\"*}\n" +
+      "      [ -f \"$t\" ] && tail -c 65536 -- \"$t\" | grep -E '\"type\":\"(user|assistant)\"' | tail -n 1 | grep -q 'Request interrupted by user' && stop=1\n" +
+      "    fi ;;\n" +
+      "  esac\n" +
+      "  printf '%s\\t%s\\n' \"$stop\" \"$s\"\n" +
+      "done", "sh", root.claudeDir]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: root.parseClaude(text)
+    }
+  }
+
+  function parseClaude(text) {
+    var list = []
+    var lines = String(text || "").split("\n")
+    for (var i = 0; i < lines.length; i++) {
+      var tab = lines[i].indexOf("\t")
+      if (tab < 0) continue
+      try {
+        var s = JSON.parse(lines[i].slice(tab + 1))
+        if (!s || typeof s !== "object" || !s.id) continue
+        if (lines[i].slice(0, tab) === "1") s.state = "idle"
+        list.push(s)
+      } catch (e) {}
+    }
+    if (JSON.stringify(list) !== JSON.stringify(srcClaudeSessions)) srcClaudeSessions = list
+  }
+
+  // Also on start, and now and then: a session that died without a word,
+  // an Esc in the middle of a step.
+  Timer {
+    interval: root.srcClaudeSessions.length > 0 ? 10000 : 60000
+    repeat: true
+    running: root.isLeader
+    onTriggered: root.claudeScan()
+  }
+
+  // "Pronto" stays a few seconds, then the activity folds away.
+  Timer {
+    interval: 500
+    repeat: true
+    running: root.claudeSessions.length > 0
+    onTriggered: root.claudeNow = Date.now()
+    onRunningChanged: root.claudeNow = Date.now()
+  }
+  onClaudeSessionsChanged: claudeNow = Date.now()
+
+  // The session's terminal, as claude-notch-notify does it: its tmux pane
+  // (window and pane selected, then the window of a client attached to that
+  // session), or up the process tree from Claude to a window Hyprland knows.
+  function focusClaude() {
+    var s = shownClaude
+    hoverExpanded = false
+    if (!s) return
+    var present = ["sh", "-c", 'p="$HOME/.local/bin/hugo-present-after"; if [ -x "$p" ]; then exec "$p" "$@"; else exec "$@"; fi', "sh"]
+    Quickshell.execDetached(present.concat(["bash", "-c",
+      "pid=$1 pane=$2 sock=$3\n" +
+      "clients=$(hyprctl clients -j 2>/dev/null) || exit 0\n" +
+      "win_of() { jq -r --argjson p \"$1\" '.[] | select(.pid == $p) | .address' <<<\"$clients\" | head -1; }\n" +
+      "find_win() { local p=$1 a; for _ in $(seq 1 20); do [ -n \"$p\" ] && [ \"$p\" -gt 1 ] 2>/dev/null || return; a=$(win_of \"$p\"); [ -n \"$a\" ] && { echo \"$a\"; return; }; p=$(ps -o ppid= -p \"$p\" 2>/dev/null | tr -d ' '); done; }\n" +
+      "addr=\n" +
+      "if [ -n \"$pane\" ]; then\n" +
+      "  T=(tmux); [ -n \"$sock\" ] && T=(tmux -S \"$sock\")\n" +
+      "  \"${T[@]}\" select-window -t \"$pane\" 2>/dev/null; \"${T[@]}\" select-pane -t \"$pane\" 2>/dev/null\n" +
+      "  sess=$(\"${T[@]}\" display -p -t \"$pane\" '#{session_name}' 2>/dev/null)\n" +
+      "  for c in $(\"${T[@]}\" list-clients -t \"$sess\" -F '#{client_pid}' 2>/dev/null); do addr=$(find_win \"$c\"); [ -n \"$addr\" ] && break; done\n" +
+      "fi\n" +
+      "[ -n \"$addr\" ] || addr=$(find_win \"$pid\")\n" +
+      "[ -n \"$addr\" ] && hyprctl dispatch \"hl.dsp.focus({ window = \\\"address:$addr\\\" })\" >/dev/null",
+      "bash", String(s.pid || 0), String(s.tmuxPane || ""), String(s.tmuxSocket || "")]))
+  }
+
+  // =====================================================================
   // IPC: omarchy-shell io.github.hugorolimf.island card weather | card close
 
   IpcHandler {
@@ -992,6 +1184,18 @@ BarWidget {
       return "ok"
     }
 
+    // A notification its sender took back (claude-hook.py: a "needs your
+    // permission" already answered in the terminal) leaves the notch.
+    function retract(uid: string): string {
+      var items = root.bar && typeof root.bar.moduleWidgets === "function" ? root.bar.moduleWidgets(root.moduleName) : [root]
+      if (!items || items.length === 0) items = [root]
+      var hit = false
+      for (var i = 0; i < items.length; i++) {
+        if (items[i] && items[i].notif && String(items[i].notif.uid) === String(uid)) { items[i].dismissNotification(); hit = true }
+      }
+      return hit ? "ok" : "none"
+    }
+
     function card(name: string): string {
       var items = root.bar && typeof root.bar.moduleWidgets === "function" ? root.bar.moduleWidgets(root.moduleName) : [root]
       if (!items || items.length === 0) items = [root]
@@ -1024,6 +1228,63 @@ BarWidget {
     font.family: root.monoFont
     font.pointSize: root.fontPt(10)
     textFormat: Text.PlainText
+  }
+
+  // One line of text that rolls over when it changes: the old line rises and
+  // fades, the new one comes up from below (the steps of a Claude session).
+  component Ticker: Item {
+    id: ticker
+    property string text: ""
+    property color color: root.strong
+    property bool flip: false
+    implicitHeight: lineA.implicitHeight
+    height: implicitHeight
+    clip: true
+    Label { id: lineA; width: ticker.width; elide: Text.ElideRight; color: ticker.color }
+    Label { id: lineB; width: ticker.width; elide: Text.ElideRight; color: ticker.color; opacity: 0 }
+    Component.onCompleted: lineA.text = text
+    onTextChanged: {
+      var current = flip ? lineB : lineA
+      if (current.text === text) return
+      if (roll.running) roll.complete()
+      var next = flip ? lineA : lineB
+      next.text = text
+      roll.into = next
+      roll.away = current
+      flip = !flip
+      roll.start()
+    }
+    ParallelAnimation {
+      id: roll
+      property Item into: null
+      property Item away: null
+      NumberAnimation { target: roll.into; property: "y"; from: root.u(9); to: 0; duration: 380; easing.type: Easing.Bezier; easing.bezierCurve: root.ease }
+      NumberAnimation { target: roll.into; property: "opacity"; from: 0; to: 1; duration: 300; easing.type: Easing.Bezier; easing.bezierCurve: root.ease }
+      NumberAnimation { target: roll.away; property: "y"; to: -root.u(9); duration: 300; easing.type: Easing.Bezier; easing.bezierCurve: root.ease }
+      NumberAnimation { target: roll.away; property: "opacity"; to: 0; duration: 200 }
+    }
+  }
+
+  // Claude's state: a pulse while it works, amber while it waits for you, a
+  // check when the turn is done.
+  component ClaudeMark: Item {
+    implicitWidth: root.u(14)
+    implicitHeight: root.u(14)
+    PulseDot {
+      anchors.centerIn: parent
+      visible: root.claudeState !== "done"
+      size: root.u(6)
+      color: root.claudeColor
+      running: root.claudeState === "working" && (root.view === "claude" || root.view === "claudeX")
+    }
+    StrokeIcon {
+      anchors.centerIn: parent
+      visible: root.claudeState === "done"
+      size: root.u(14)
+      strokeWidth: 1.5
+      color: root.green
+      path: "M5.5 12.5l4 4 9-9.5"
+    }
   }
 
   // One page per view. Never hidden with `visible` (positioners inside
@@ -1576,6 +1837,40 @@ BarWidget {
           PulseDot { anchors.verticalCenter: parent.verticalCenter; size: root.u(6); color: root.red; running: root.view === "screen" }
           Label { anchors.verticalCenter: parent.verticalCenter; text: root.tr("Gravando") }
           Sub { anchors.verticalCenter: parent.verticalCenter; text: root.screenElapsed; font.features: ({ "tnum": 1 }) }
+        }
+      }
+
+      // Claude Code at work: its state and the current step, rolling over.
+      Page {
+        key: "claude"
+        width: root.u(300) - root.u(32)
+        height: root.compactH
+        ClaudeMark {
+          id: claudeMark
+          anchors.left: parent.left
+          anchors.verticalCenter: parent.verticalCenter
+        }
+        Ticker {
+          anchors.left: claudeMark.right
+          anchors.leftMargin: root.u(8)
+          anchors.right: claudeMore.left
+          anchors.rightMargin: root.claudeExtra > 0 ? root.u(8) : 0
+          anchors.verticalCenter: parent.verticalCenter
+          text: root.claudeLine
+          color: root.claudeState === "waiting" ? root.amber : root.strong
+        }
+        Sub {
+          id: claudeMore
+          anchors.right: parent.right
+          anchors.verticalCenter: parent.verticalCenter
+          text: root.claudeExtra > 0 ? "+" + root.claudeExtra : ""
+        }
+        MouseArea {
+          anchors.fill: parent
+          anchors.leftMargin: -root.u(16)
+          anchors.rightMargin: -root.u(16)
+          cursorShape: Qt.PointingHandCursor
+          onClicked: root.focusClaude()
         }
       }
 
@@ -2200,6 +2495,96 @@ BarWidget {
               root.hoverExpanded = false
             }
           }
+        }
+      }
+
+      // Claude Code, on hover: the session's title, project and state, and
+      // its last three steps (the newest at the bottom). A click goes to its
+      // terminal.
+      Page {
+        id: claudePage
+        key: "claudeX"
+        width: root.u(380) - root.u(40)
+        height: claudeCol.implicitHeight + root.u(26)
+        readonly property var recent: root.claudeSteps.slice(-3)
+        Column {
+          id: claudeCol
+          y: root.u(13)
+          width: parent.width
+          spacing: root.u(3)
+          Item {
+            width: parent.width
+            height: claudeTitleText.implicitHeight
+            ClaudeMark {
+              id: claudeMarkX
+              anchors.left: parent.left
+              anchors.verticalCenter: parent.verticalCenter
+            }
+            Label {
+              id: claudeTitleText
+              anchors.left: claudeMarkX.right
+              anchors.leftMargin: root.u(8)
+              anchors.right: claudeMoreX.left
+              anchors.rightMargin: root.u(8)
+              anchors.verticalCenter: parent.verticalCenter
+              elide: Text.ElideRight
+              text: root.claudeTitle
+            }
+            Sub {
+              id: claudeMoreX
+              anchors.right: parent.right
+              anchors.verticalCenter: parent.verticalCenter
+              text: root.claudeExtra > 0 ? "+" + root.claudeExtra : ""
+            }
+          }
+          Sub {
+            x: root.u(22)
+            width: parent.width - x
+            elide: Text.ElideRight
+            color: root.claudeState === "waiting" ? root.amber : root.muted
+            text: (root.shownClaude ? String(root.shownClaude.project || "") + "  ·  " : "")
+              + (root.claudeState === "waiting" ? root.tr("Esperando você") : root.claudeState === "done" ? root.tr("Pronto") : root.tr("Trabalhando"))
+          }
+          Item { width: 1; height: root.u(5) }
+          Repeater {
+            model: claudePage.recent.length > 0 ? claudePage.recent : [null]
+            delegate: Item {
+              required property var modelData
+              required property int index
+              readonly property bool newest: index === claudePage.recent.length - 1 || modelData === null
+              readonly property bool live: newest && root.claudeState !== "done"
+              x: root.u(22)
+              width: claudeCol.width - x
+              height: root.u(18)
+              StrokeIcon {
+                id: stepIcon
+                anchors.left: parent.left
+                anchors.verticalCenter: parent.verticalCenter
+                size: root.u(10)
+                strokeWidth: 1.4
+                color: live ? root.hi : root.muted
+                path: live ? "M9 6l6 6-6 6" : "M5.5 12.5l4 4 9-9.5"
+              }
+              Text {
+                anchors.left: stepIcon.right
+                anchors.leftMargin: root.u(7)
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                elide: Text.ElideRight
+                textFormat: Text.PlainText
+                font.family: root.monoFont
+                font.pointSize: root.fontPt(live ? 10.5 : 10)
+                color: live ? root.strong : root.muted
+                text: modelData ? root.claudeStep(modelData) : root.tr("Pensando…")
+              }
+            }
+          }
+        }
+        MouseArea {
+          anchors.fill: parent
+          z: -1
+          cursorShape: Qt.PointingHandCursor
+          onClicked: root.focusClaude()
         }
       }
 
