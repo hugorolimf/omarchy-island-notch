@@ -17,6 +17,10 @@ fold back into it.
   player); hover to expand into a player with progress, previous, play/pause and next.
 - 🔴 **Screen recording.** A red dot and the elapsed time while Omarchy's screen
   recorder runs; hover for a stop button.
+- 🗣️ **Voice assistant.** Optional: a push-to-talk assistant (any script) can write
+  its state to `$XDG_RUNTIME_DIR/assistente/notch.json`; the notch draws it like
+  dictation: listening with the mic waves, thinking with what was heard, then the
+  answer in the big card (a click opens the conversation).
 - 🎙️ **Dictation.** Listening and transcribing states for Omarchy's voice dictation
   (voxtype), in place of a separate pill.
 - 🔔 **Notifications.** Each one drops in from the notch in a big card, long enough to

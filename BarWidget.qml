@@ -27,7 +27,7 @@ BarWidget {
   moduleName: "io.github.hugorolimf.island"
   // Portuguese, or English for every other locale.
   readonly property bool portuguese: Qt.locale().name.indexOf("pt") === 0
-  readonly property var enText: ({"RESPONDER": "REPLY", "ABRIR": "OPEN", "ABRIR APP": "OPEN APP", "ABRIR IPHONE": "OPEN IPHONE", "FECHAR": "CLOSE", "COPIADO": "COPIED", "COPIAR": "COPY", "Gravando": "Recording", "Transcrevendo…": "Transcribing…", "Ditando…": "Dictating…", "Responder…": "Reply…", "GRAVANDO TELA": "RECORDING SCREEN", "PARAR": "STOP", "  ·  agora": "  ·  now", "Lembrete": "Reminder",
+  readonly property var enText: ({"RESPONDER": "REPLY", "ABRIR": "OPEN", "ABRIR APP": "OPEN APP", "ABRIR IPHONE": "OPEN IPHONE", "FECHAR": "CLOSE", "COPIADO": "COPIED", "COPIAR": "COPY", "Gravando": "Recording", "Transcrevendo…": "Transcribing…", "Ditando…": "Dictating…", "Responder…": "Reply…", "GRAVANDO TELA": "RECORDING SCREEN", "PARAR": "STOP", "  ·  agora": "  ·  now", "Lembrete": "Reminder", "Ouvindo…": "Listening…", "Pensando…": "Thinking…", "Não entendi": "Didn't catch that", "Assistente": "Assistant", "Você: ": "You: ", "clique para abrir a conversa": "click to open the conversation",
     "Pensando…": "Thinking…", "Esperando você": "Waiting for you", "Pronto": "Done", "Trabalhando": "Working",
     "Edita": "Edits", "Escreve": "Writes", "Lê": "Reads", "Roda:": "Runs:", "Busca": "Searches", "Procura": "Finds",
     "Delega:": "Delegates:", "Abre": "Opens", "Pesquisa": "Looks up", "Atualiza as tarefas": "Updates the to-dos",
@@ -67,7 +67,7 @@ BarWidget {
   readonly property string dictBackend: leader ? leader.srcDictBackend : ""
 
   // ---- live microphone level while dictating (PipeWire peak meter; off otherwise)
-  readonly property bool listening: activity === "dictation"
+  readonly property bool listening: activity === "dictation" || view === "askListen"
   property var micHistory: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
 
   PwObjectTracker { objects: root.listening && Pipewire.defaultAudioSource ? [Pipewire.defaultAudioSource] : [] }
@@ -136,6 +136,39 @@ BarWidget {
   // The most recently active session shows, the others count as "+N"; the
   // one on screen stays while it moved in the last 10 s, so two busy sessions
   // don't take turns at every step.
+  // ---- voice assistant (F10): ~/Projects/ferramentas/assistente writes its
+  // state to $XDG_RUNTIME_DIR/assistente/notch.json (listening, thinking,
+  // missed, answer); only the leader watches it. Drawn like dictation.
+  readonly property string askDir: Quickshell.env("XDG_RUNTIME_DIR") + "/assistente"
+  property var srcAsk: null
+  readonly property var ask: leader ? leader.srcAsk : null
+  property real askNow: Date.now()
+  property real askDismissedTs: 0
+  property bool askHold: false
+  readonly property int askAnswerMs: ask ? Math.min(30000, Math.max(9000, String(ask.answer || "").length * 70)) : 0
+  readonly property string askState: {
+    var a = ask
+    if (!a || a.ts === askDismissedTs) return ""
+    var age = askNow - a.ts
+    if (a.state === "listening") return age < 100000 ? "listening" : ""
+    if (a.state === "thinking") return age < 300000 ? "thinking" : ""
+    if (a.state === "missed") return age < 2500 ? "missed" : ""
+    if (a.state === "answer") return (askHold || age < askAnswerMs) ? "answer" : ""
+    return ""
+  }
+  Timer {
+    interval: 400
+    repeat: true
+    running: root.askState !== ""
+    onTriggered: root.askNow = Date.now()
+  }
+  function dismissAsk() { if (ask) askDismissedTs = ask.ts; askHold = false }
+  function openAsk() {
+    var uri = ask ? String(ask.open || "") : ""
+    dismissAsk()
+    if (uri.indexOf("obsidian://") === 0) Quickshell.execDetached(["xdg-open", uri])
+  }
+
   readonly property string claudeDir: Quickshell.env("XDG_RUNTIME_DIR") + "/island-notch/claude"
   property var srcClaudeSessions: []
   readonly property var claudeSessions: leader ? leader.srcClaudeSessions : []
@@ -281,7 +314,12 @@ BarWidget {
   readonly property bool shownIphone: shownNotif !== null && shownNotif.kind === "iphone"
   // iPhone: the app's own icon (cached); others: the notification's image or
   // the app's icon; with none, a stroke glyph.
-  readonly property string cardIcon: shownIphone ? iphoneIcon : notifIcon
+  // Claude's own notifications (and the voice assistant's) carry its mark,
+  // drawn as the bar draws it, in Claude's orange, instead of an image.
+  readonly property color claudeOrange: "#D97757"
+  readonly property bool cardClaude: shownNotif !== null
+    && /^(claude|claude code|assistente)$/i.test(String(shownNotif.app || ""))
+  readonly property string cardIcon: cardClaude ? "" : shownIphone ? iphoneIcon : notifIcon
   readonly property string cardGlyph: shownIphone ? Icons.phone
     : shownNotif && shownNotif.kind === "message" ? Icons.message : Icons.bell
   // The iPhone app's own icon, fetched once by Island iPhone (app-icon.sh).
@@ -666,6 +704,7 @@ BarWidget {
   readonly property string activity: !isHost ? "idle"
     : dictState === "recording" ? "dictation"
     : dictState === "transcribing" ? "transcribing"
+    : askState !== "" ? "ask"
     : hudActive ? "hud"
     : notifActive ? "notif"
     : screenRecording ? "screen"
@@ -682,6 +721,7 @@ BarWidget {
   readonly property bool expandable: activity === "media" || activity === "screen" || activity === "notif" || activity === "claude"
   // compact page key, expanded page key or "card"
   readonly property string view: cardName !== "" ? "card"
+    : activity === "ask" ? (askState === "answer" ? "askAnswer" : askState === "thinking" ? "askThink" : askState === "missed" ? "askMissed" : "askListen")
     : activity === "notif" ? (notifWide ? (notifOpen ? "iphone" : "iphoneMini") : (notifOpen ? "notifX" : "notif"))
     : ((hoverExpanded && expandable) || (activity === "media" && mediaPinned)) ? activity + "X"
     : activity
@@ -708,6 +748,10 @@ BarWidget {
     if (view === "mediaX") return u(400)
     if (view === "screenX") return u(280)
     if (view === "claudeX") return u(380)
+    if (view === "askListen") return u(196)
+    if (view === "askThink") return u(320)
+    if (view === "askMissed") return askMissedRow.implicitWidth + u(32)
+    if (view === "askAnswer") return u(380)
     if (view === "claude") return u(300)
     if (view === "iphone") return u(380)
     if (view === "iphoneMini") return iphoneMiniRow.implicitWidth + u(32)
@@ -726,6 +770,9 @@ BarWidget {
     if (view === "mediaX") return u(168)
     if (view === "screenX") return u(62)
     if (view === "claudeX") return claudeCol.implicitHeight + u(26)
+    if (view === "askListen") return barH + u(14)
+    if (view === "askThink") return askThinkCol.implicitHeight + u(18)
+    if (view === "askAnswer") return askCol.implicitHeight + u(26)
     if (view === "iphone") return iphoneCard.implicitHeight
     if (view === "notifX") return compactH + u(18) + (shownPinned ? notifActionsX.height + u(10) : 0)
     if (view === "dictation") return barH + u(14)
@@ -733,8 +780,8 @@ BarWidget {
     return compactH
   }
   readonly property real targetR: u(view === "mediaX" ? 26
-    : (view === "card" || view === "screenX" || view === "claudeX" || view === "iphone") ? 20
-    : view === "dictation" || view === "notifX" ? 14 : 10)
+    : (view === "card" || view === "screenX" || view === "claudeX" || view === "iphone" || view === "askAnswer") ? 20
+    : view === "dictation" || view === "notifX" || view === "askListen" || view === "askThink" ? 14 : 10)
 
   property real notchW: 0
   property real notchH: barH
@@ -1084,6 +1131,41 @@ BarWidget {
   }
 
   // =====================================================================
+  // Voice assistant: the folder is watched; the marker holds the shell's pid,
+  // so assistente-voz knows the notch draws its states (and sends no
+  // notifications). Read through a FileView, never a command line.
+
+  Process {
+    id: askWatch
+    command: ["setpriv", "--pdeathsig", "TERM", "sh", "-c",
+      "umask 077; mkdir -p \"$1\" && chmod 700 \"$1\" || exit 1; echo $PPID > \"$1/notch.watching\"; "
+      + "exec inotifywait -m -q -e close_write,moved_to --format %f \"$1\"", "sh", root.askDir]
+    running: root.isLeader
+    stdout: SplitParser { onRead: function(line) { if (line === "notch.json") askRead.reload() } }
+    onRunningChanged: if (running) askRead.reload()
+    onExited: if (root.isLeader) askWatchRetry.restart()
+  }
+
+  Timer {
+    id: askWatchRetry
+    interval: 15000
+    onTriggered: askWatch.running = root.isLeader
+  }
+
+  FileView {
+    id: askRead
+    path: root.isLeader ? root.askDir + "/notch.json" : ""
+    printErrors: false
+    onLoaded: {
+      try {
+        var d = JSON.parse(text())
+        root.askNow = Date.now()
+        root.srcAsk = d
+      } catch (e) {}
+    }
+  }
+
+  // =====================================================================
   // Claude Code: claude-hook.py writes $XDG_RUNTIME_DIR/island-notch/claude/
   // <session>.json on every step; inotify tells the leader when to read the
   // folder again. Everything goes through those private files, nothing
@@ -1385,6 +1467,25 @@ BarWidget {
 
   // Claude's state: a pulse while it works, amber while it waits for you, a
   // check when the turn is done.
+  // The assistant's mark: Claude's, drawn as the bar draws it; breathes while it thinks.
+  component AskMark: Item {
+    id: askMark
+    property bool busy: false
+    implicitWidth: root.u(16)
+    implicitHeight: root.u(16)
+    ClaudeLogo {
+      anchors.centerIn: parent
+      size: parent.width
+    }
+    SequentialAnimation on opacity {
+      running: askMark.busy
+      loops: Animation.Infinite
+      alwaysRunToEnd: true
+      NumberAnimation { to: 0.35; duration: 650; easing.type: Easing.InOutSine }
+      NumberAnimation { to: 1; duration: 650; easing.type: Easing.InOutSine }
+    }
+  }
+
   component ClaudeMark: Item {
     implicitWidth: root.u(14)
     implicitHeight: root.u(14)
@@ -1535,17 +1636,22 @@ BarWidget {
       height: width
       Image {
         anchors.fill: parent
-        source: root.notifIcon
-        visible: root.notifIcon !== ""
+        source: root.cardClaude ? "" : root.notifIcon
+        visible: !root.cardClaude && root.notifIcon !== ""
         sourceSize.width: 64
         sourceSize.height: 64
         fillMode: Image.PreserveAspectFit
         asynchronous: true
         smooth: true
       }
+      ClaudeLogo {
+        anchors.centerIn: parent
+        visible: root.cardClaude
+        size: parent.width
+      }
       StrokeIcon {
         anchors.fill: parent
-        visible: root.notifIcon === ""
+        visible: !root.cardClaude && root.notifIcon === ""
         size: parent.width
         color: root.hi
         path: root.shownNotif && root.shownNotif.kind === "message" ? Icons.message : Icons.bell
@@ -2049,6 +2155,111 @@ BarWidget {
         }
       }
 
+      // voice assistant (F10): listening, like dictation but with Claude's mark
+      Page {
+        key: "askListen"
+        width: root.u(196)
+        height: root.barH + root.u(14)
+        Row {
+          anchors.centerIn: parent
+          spacing: root.u(8)
+          AskMark { anchors.verticalCenter: parent.verticalCenter }
+          LiveBars { anchors.verticalCenter: parent.verticalCenter; span: root.u(20) }
+          Label { anchors.verticalCenter: parent.verticalCenter; text: root.tr("Ouvindo…") }
+        }
+      }
+
+      Page {
+        key: "askThink"
+        width: root.u(320) - root.u(32)
+        height: askThinkCol.implicitHeight + root.u(18)
+        Column {
+          id: askThinkCol
+          y: root.u(9)
+          width: parent.width
+          spacing: root.u(3)
+          Row {
+            spacing: root.u(8)
+            AskMark { anchors.verticalCenter: parent.verticalCenter; busy: root.view === "askThink" }
+            Label { anchors.verticalCenter: parent.verticalCenter; text: root.tr("Pensando…") }
+          }
+          Sub {
+            visible: text !== ""
+            width: parent.width
+            elide: Text.ElideRight
+            text: root.ask && root.ask.heard ? "«" + root.ask.heard + "»" : ""
+          }
+        }
+      }
+
+      Page {
+        key: "askMissed"
+        width: askMissedRow.implicitWidth
+        height: root.compactH
+        Row {
+          id: askMissedRow
+          anchors.verticalCenter: parent.verticalCenter
+          spacing: root.u(8)
+          AskMark { anchors.verticalCenter: parent.verticalCenter }
+          Label { anchors.verticalCenter: parent.verticalCenter; color: root.amber; text: root.tr("Não entendi") }
+        }
+      }
+
+      // the answer, in the big card; a click opens the day's conversation
+      Page {
+        key: "askAnswer"
+        width: root.u(380) - root.u(40)
+        height: askCol.implicitHeight + root.u(26)
+        Column {
+          id: askCol
+          y: root.u(13)
+          width: parent.width
+          spacing: root.u(4)
+          Row {
+            spacing: root.u(8)
+            AskMark { anchors.verticalCenter: parent.verticalCenter }
+            Label { anchors.verticalCenter: parent.verticalCenter; text: root.tr("Assistente") }
+          }
+          Sub {
+            visible: text !== ""
+            width: parent.width
+            elide: Text.ElideRight
+            text: root.ask && root.ask.heard ? root.tr("Você: ") + root.ask.heard : ""
+          }
+          Text {
+            width: parent.width
+            topPadding: root.u(2)
+            text: root.ask ? String(root.ask.answer || "") : ""
+            color: root.ask && root.ask.ok === false ? root.amber : root.strong
+            font.family: root.sansFont
+            font.pointSize: root.fontPt(12)
+            wrapMode: Text.Wrap
+            maximumLineCount: 9
+            elide: Text.ElideRight
+            lineHeight: 1.08
+            textFormat: Text.PlainText
+          }
+          Sub {
+            visible: root.ask && String(root.ask.open || "") !== ""
+            topPadding: root.u(2)
+            font.pointSize: root.fontPt(9)
+            text: root.tr("clique para abrir a conversa")
+          }
+        }
+        MouseArea {
+          anchors.fill: parent
+          anchors.margins: -root.u(10)
+          hoverEnabled: true
+          acceptedButtons: Qt.LeftButton | Qt.RightButton
+          cursorShape: Qt.PointingHandCursor
+          onContainsMouseChanged: root.askHold = containsMouse
+          onClicked: function(mouse) {
+            if (mouse.button === Qt.RightButton) root.dismissAsk()
+            else root.openAsk()
+          }
+        }
+      }
+
       // dictation: the notch hangs lower while the user speaks; bars follow the voice
       Page {
         key: "dictation"
@@ -2106,9 +2317,14 @@ BarWidget {
               sourceSize.width: 64
               sourceSize.height: 64
             }
+            ClaudeLogo {
+              anchors.centerIn: parent
+              visible: root.cardClaude
+              size: parent.width
+            }
             StrokeIcon {
               anchors.fill: parent
-              visible: miniIcon.status !== Image.Ready
+              visible: !root.cardClaude && miniIcon.status !== Image.Ready
               size: parent.width
               color: root.hi
               path: root.cardGlyph
@@ -2177,9 +2393,14 @@ BarWidget {
               sourceSize.height: 128
               onStatusChanged: if (status === Image.Error && root.iphoneIconTries < 2) iphoneIconRetry.restart()
             }
+            ClaudeLogo {
+              anchors.centerIn: parent
+              visible: root.cardClaude
+              size: root.u(19)
+            }
             StrokeIcon {
               anchors.centerIn: parent
-              visible: appImage.status !== Image.Ready
+              visible: !root.cardClaude && appImage.status !== Image.Ready
               size: root.u(17)
               color: root.hi
               path: root.cardGlyph
