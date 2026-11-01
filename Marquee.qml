@@ -14,6 +14,11 @@ Item {
   property int weight: Font.Normal
   property real maxWidth: 160
   property bool running: true
+  // How many passes per text: endless by default; 1 slides a new text past
+  // once (when it arrives, or as soon as it may run) and then rests at its
+  // start with the edge faded.
+  property int passes: Animation.Infinite
+  property bool pending: true
   readonly property real gap: 28
   // Rest between passes. Scrolling repaints the bar every frame, so the
   // compact pill rests longer than the open card.
@@ -24,7 +29,16 @@ Item {
   implicitHeight: first.implicitHeight
   clip: true
 
-  onTextChanged: { strip.x = 0; if (scroll.running) scroll.restart() }
+  onTextChanged: { strip.x = 0; pending = true; kick() }
+  onRunningChanged: kick()
+  onOverflowChanged: kick()
+  Component.onCompleted: kick()
+  function kick() {
+    if (!running || !overflow) { scroll.stop(); return }
+    if (!pending) return
+    if (passes !== Animation.Infinite) pending = false
+    scroll.restart()
+  }
 
   Row {
     id: strip
@@ -54,8 +68,7 @@ Item {
 
   SequentialAnimation {
     id: scroll
-    running: root.running && root.overflow
-    loops: Animation.Infinite
+    loops: root.passes
     onStopped: strip.x = 0
     PropertyAction { target: strip; property: "x"; value: 0 }
     PauseAnimation { duration: root.pause }

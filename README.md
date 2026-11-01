@@ -17,10 +17,22 @@ fold back into it.
   player); hover to expand into a player with progress, previous, play/pause and next.
 - 🔴 **Screen recording.** A red dot and the elapsed time while Omarchy's screen
   recorder runs; hover for a stop button.
-- 🗣️ **Voice assistant.** Optional: a push-to-talk assistant (any script) can write
+- 🗣️ **Voice assistant.** Optional, and asleep unless you bring your own: the notch ships
+  no assistant. With a push-to-talk script named `assistente-voz` on your PATH, it can write
   its state to `$XDG_RUNTIME_DIR/assistente/notch.json`; the notch draws it like
   dictation: listening with the mic waves, thinking with what was heard, then the
   answer in the big card (a click opens the conversation).
+  `omarchy-shell io.github.hugorolimf.island card ask` (or Tab or a click on an answer)
+  opens the conversation: the day's thread from `notch.json` (`thread`, `dia`),
+  your messages in bubbles, its answers as text, a box to reply under it. Enter
+  hands the text to `assistente-voz texto <private file>` and the card stays;
+  holding the talk key with it open listens inside it; NOVA runs `assistente --nova`.
+  PENSAMENTO steps through Claude's five effort levels with a five-bar meter (click up,
+  right click down; `assistente --esforco`, echoed as `esforco` in notch.json).
+  Keys: ↑↓ scroll, ←→ walk PENSAMENTO/NOVA/ABRIR with the box empty, Tab or Esc close.
+  An answer to a spoken question opens the conversation passive (no keyboard, no
+  click-away grab): it stays while you keep talking and folds a while after the
+  last answer; a click, Tab or the tap take it over for typing.
 - 🎙️ **Dictation.** Listening and transcribing states for Omarchy's voice dictation
   (voxtype), in place of a separate pill.
 - 🔔 **Notifications.** Each one drops in from the notch in a big card, long enough to
@@ -110,6 +122,11 @@ their own);
 `hud` is what the bundled on-screen display sends; `card weather` opens the weather
 card.
 
+Something that waits on you can stay until it's dealt with: a critical notification
+with the `x-island-sticky` hint (`notify-send -u critical -h boolean:x-island-sticky:true …`,
+or `"sticky": true` in `notify`) stays in the notch until it's closed or taken back
+(`retract <id>`), and comes back after any other notification that showed over it.
+
 ## Claude Code
 
 The live session comes from a small hook, `claude-hook.py` in this folder. The
@@ -137,6 +154,10 @@ output, file contents or the transcript. "Done" shows for a few seconds after a 
 ends, then the notch folds away; an empty turn, or Claude Code's own helpers
 finishing, does not flash.
 
+To keep Claude at work out of the notch and see only the notifications it sends,
+add `"claudeWork": false` to the notch's entry in `~/.config/omarchy/shell.json`
+(`{"id": "io.github.hugorolimf.island", "claudeWork": false}`).
+
 If a notifier hook of yours leaves a notification's id in
 `$XDG_RUNTIME_DIR/island-notch/claude/<session>.notif` (`{"id": 17, "at": <ms>}`),
 for "Claude needs your permission", the hook takes that notification back once the
@@ -163,6 +184,9 @@ notch and the notifications history.
   hook, read by the notch): one private (0600) file per session inside a 0700 folder,
   written to a temporary file and renamed. Removed when the session ends, or by the
   notch once its Claude process is gone. Gone at logout (it is in the runtime dir).
+- `$XDG_RUNTIME_DIR/assistente/notch.watching`: only with `assistente-voz` on your PATH,
+  the shell's pid, so the script knows the notch draws its states. A question typed in
+  the card goes through a private file there (0600 in a 0700 folder), removed when read.
 
 ## Requirements
 
