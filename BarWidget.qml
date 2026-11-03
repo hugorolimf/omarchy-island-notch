@@ -83,13 +83,30 @@ IslandIpc {
 
   // Room the notch takes at the top of this monitor, for snapping and
   // arranging windows (hypr/windowing.lua), like the dock's at the bottom.
-  // Always the resting (compact) height, even while idle, so layouts don't
-  // shift every time the notch comes and goes.
+  // Always the tallest resting height (the two-line player, dictation), even
+  // while idle, so the notch never sits on a window and layouts don't shift
+  // every time it comes and goes. Hover cards may still overlap for a moment.
   readonly property string monitorName: QsWindow.window && QsWindow.window.screen ? QsWindow.window.screen.name : ""
-  readonly property int coverHeight: bar !== null && bar.position === "top" ? Math.ceil(compactH) : 0
+  readonly property int coverHeight: bar !== null && bar.position === "top" ? Math.ceil(mediaMiniH) : 0
   function publishCover() {
-    if (monitorName !== "" && coverFile.path !== "") coverFile.setText(String(coverHeight) + "\n")
+    if (monitorName === "" || coverFile.path === "") return
+    coverFile.setText(String(coverHeight) + "\n")
+    coverRefit.restart()
   }
+  // Windows already on this monitor step under the new line (maximized ones
+  // refit, the others are kept inside the free area).
+  Timer {
+    id: coverRefit
+    interval: 150
+    onTriggered: Quickshell.execDetached(["hyprctl", "eval",
+      'if windowing_refit then windowing_refit("' + root.monitorName + '") end'])
+  }
+
+  // A fullscreen window on this monitor's workspace hides the notch: it
+  // would sit on the window, and the bar is out of sight there anyway.
+  readonly property var hyprMonitor: QsWindow.window && QsWindow.window.screen ? Hyprland.monitorFor(QsWindow.window.screen) : null
+  readonly property bool underFullscreen: hyprMonitor !== null && hyprMonitor.activeWorkspace !== null
+    && hyprMonitor.activeWorkspace.hasFullscreen
   onCoverHeightChanged: publishCover()
   // after the file's path has followed the new name
   onMonitorNameChanged: Qt.callLater(publishCover)
@@ -103,7 +120,7 @@ IslandIpc {
   PanelWindow {
     id: overlay
     screen: root.QsWindow.window ? root.QsWindow.window.screen : null
-    visible: root.shown && root.bar !== null && root.bar.position === "top"
+    visible: root.shown && root.bar !== null && root.bar.position === "top" && !root.underFullscreen
     anchors { top: true; left: true; right: true }
     implicitHeight: 600
     exclusionMode: ExclusionMode.Ignore

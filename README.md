@@ -66,6 +66,9 @@ fold back into it.
 - 🌤️ **Weather card** on demand, from Omarchy's own weather location.
 - 🌍 English and Portuguese, following your system language. Sized per monitor,
   drawn natively (no scaling blur).
+- 🪟 **Stays off your windows.** It publishes the room it takes at the top (its tallest
+  resting size, the two-line player) so a window manager that reads it keeps windows
+  below it, and it hides while a window is fullscreen on that monitor.
 
 ## See it
 
@@ -182,8 +185,10 @@ notch and the notifications history.
 - `~/.cache/island-notch/`: the weather forecast and detected location (10-minute
   and one-day caches).
 - `~/.local/state/omarchy/io.github.hugorolimf.island/cover-<monitor>`: the height
-  the notch takes at the top of each monitor, for window managers that keep windows
-  clear of it.
+  the notch takes at the top of each monitor (its tallest resting size), for window
+  managers that keep windows clear of it. When it changes, the notch calls
+  `windowing_refit` through `hyprctl eval`, only if your Hyprland config defines it
+  ([Smart Windows](https://github.com/hugorolimf/omarchy-smart-windows) does).
 - `~/.local/state/omarchy/notifications/history/` and `images/`: the notifications
   history, one JSON file each (the newest 100) plus copies of their images, and
   `~/.local/state/omarchy/notifications.json` (Do Not Disturb). The same places
