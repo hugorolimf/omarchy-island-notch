@@ -142,7 +142,8 @@ IslandCards {
   }
 
   // =====================================================================
-  // Voice assistant: the folder is watched; the marker holds the shell's pid,
+  // Voice assistant: the folder is watched (notch.json here, fila.json and
+  // modelos.json in IslandAsk); the marker holds the shell's pid,
   // so assistente-voz knows the notch draws its states (and sends no
   // notifications). Read through a FileView, never a command line.
 
@@ -158,8 +159,8 @@ IslandCards {
       "umask 077; mkdir -p \"$1\" && chmod 700 \"$1\" || exit 1; echo $PPID > \"$1/notch.watching\"; "
       + "exec inotifywait -m -q -e close_write,moved_to --format %f \"$1\"", "sh", root.askDir]
     running: root.isLeader && root.askInstalled
-    stdout: SplitParser { onRead: function(line) { if (line === "notch.json") askRead.reload() } }
-    onRunningChanged: if (running) askRead.reload()
+    stdout: SplitParser { onRead: function(line) { if (line === "notch.json") askRead.reload(); else root.askFileChanged(line) } }
+    onRunningChanged: if (running) { askRead.reload(); root.askFileChanged("fila.json"); root.askFileChanged("modelos.json") }
     onExited: if (root.isLeader) askWatchRetry.restart()
   }
 

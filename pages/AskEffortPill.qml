@@ -11,14 +11,17 @@ import "../Icons.js" as Icons
 
 // PENSAMENTO: the level as five bars, like a signal meter, that spring up and
 // settle down as it changes; the pill squeezes and springs back on each step.
+// Five bars for Claude's five levels; a model that takes fewer skips some,
+// and one that takes none hides the pill.
 Rectangle {
   id: askThink
   property var root
   property var askCard
   function pop() { askThinkPop.restart() }
-  readonly property int level: root.askEfforts.indexOf(root.askEffort)
+  readonly property int level: root.askAllEfforts.indexOf(root.askEffort)
   readonly property bool selected: askCard.sel === "pensar"
   anchors.verticalCenter: parent.verticalCenter
+  visible: root.askHasEffort
   width: askThinkRow.implicitWidth + root.u(18)
   height: root.u(22)
   radius: height / 2

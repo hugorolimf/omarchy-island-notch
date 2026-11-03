@@ -22,7 +22,7 @@ import "Shared.js" as Shared
 // only reserves the notch's width; it draws nothing.
 //
 // The logic lives in notch/, one concern per file, each extending the one
-// before it (IslandState → IslandMedia → … → IslandIpc); the pages are in
+// before it (IslandState → IslandAsk → IslandMedia → … → IslandIpc); the pages are in
 // pages/ and the small shared pieces in ui/.
 IslandIpc {
   id: root

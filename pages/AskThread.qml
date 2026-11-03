@@ -10,7 +10,8 @@ import "../ui"
 import "../Icons.js" as Icons
 
 // The day's thread in the assistant card; it keeps to its end as messages
-// come in, and its edges fade into the notch when there is more.
+// come in, and its edges fade into the notch when there is more. Under the
+// answer under way, the messages queued for after it, as outlines.
 Item {
   id: askThreadView
   property var root
@@ -51,8 +52,9 @@ Item {
           required property var modelData
           required property int index
           readonly property bool mine: modelData.quem === "voce"
+          readonly property bool stopped: !mine && modelData.parado === true
           width: askThreadCol.width
-          height: mine ? mineBubble.implicitHeight : reply.implicitHeight
+          height: mine ? mineBubble.implicitHeight : stopped ? stoppedRow.implicitHeight : reply.implicitHeight
           AskBubble { root: askThreadView.root
             id: mineBubble
             visible: parent.mine
@@ -62,9 +64,32 @@ Item {
             meta: !parent.mine ? "" : (parent.index >= 2 && askCard.thread[parent.index - 2].hora === parent.modelData.hora) ? ""
               : String(parent.modelData.hora || "") + "  ·  " + askCard.viaLabel(parent.modelData)
           }
+          // the stop button cut this answer short
+          Row {
+            id: stoppedRow
+            visible: parent.stopped
+            spacing: root.u(7)
+            Rectangle {
+              anchors.verticalCenter: parent.verticalCenter
+              width: root.u(7)
+              height: width
+              radius: root.u(1.5)
+              color: root.muted
+            }
+            Text {
+              anchors.verticalCenter: parent.verticalCenter
+              text: root.tr("INTERROMPIDO")
+              color: root.muted
+              font.family: root.monoFont
+              font.pointSize: root.fontPt(9.5)
+              font.weight: Font.Medium
+              font.letterSpacing: 0.5
+              textFormat: Text.PlainText
+            }
+          }
           Text {
             id: reply
-            visible: !parent.mine
+            visible: !parent.mine && !parent.stopped
             width: parent.width - root.u(8)
             text: String(parent.modelData.texto || "")
             color: parent.modelData.ok === false ? root.amber : root.strong
@@ -92,8 +117,21 @@ Item {
           width: Math.min(implicitWidth, parent.parent.width - root.u(40))
           elide: Text.ElideRight
           color: root.muted
-          text: askCard.pending === "" ? root.tr("Transcrevendo…")
+          text: root.askStopping ? root.tr("Parando…") : askCard.pending === "" ? root.tr("Transcrevendo…")
             : root.ask && root.ask.passo ? String(root.ask.passo) : root.tr("Pensando…")
+        }
+      }
+      // sent meanwhile: they go in together when this answer ends
+      Repeater {
+        model: root.askQueue
+        AskBubble { root: askThreadView.root
+          required property var modelData
+          required property int index
+          width: askThreadCol.width
+          queued: true
+          text: String(modelData.texto || "")
+          meta: index === 0 ? root.tr("NA FILA · CLIQUE PARA EDITAR") : ""
+          onClicked: askCard.editQueued(modelData)
         }
       }
       Label { root: askThreadView.root

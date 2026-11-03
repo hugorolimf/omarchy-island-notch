@@ -29,7 +29,20 @@ fold back into it.
   holding the talk key with it open listens inside it; NOVA runs `assistente --nova`.
   PENSAMENTO steps through Claude's five effort levels with a five-bar meter (click up,
   right click down; `assistente --esforco`, echoed as `esforco` in notch.json).
-  Keys: ↑↓ scroll, ←→ walk PENSAMENTO/NOVA/ABRIR with the box empty, Tab or Esc close.
+  The title is the model that answers. Write `modelos.json` beside `notch.json`
+  (`{"modelos":[{"valor","nome","descricao","esforcos"}],"escolhido"}`, refreshed by
+  `assistente --modelos`, so the list is always what your tools offer and never a fixed
+  one) and the title opens it: a pick runs `assistente --modelo <valor>` and PENSAMENTO
+  then steps only through the levels that model takes. Without the file the title just
+  reads ASSISTANT and nothing else changes.
+  While it answers, Enter queues what you type, in outlined bubbles under the answer,
+  and they go in together when it ends, as in Claude Code's terminal. Your script keeps
+  them in `fila.json` (`{"fila":[{"id","texto"}]}`). A click takes a queued message back
+  to the box (`assistente --tirar-da-fila <id>`). The stop button, or Esc, runs
+  `assistente --parar` and puts the whole queue back in the box; a thread entry with
+  `parado` shows as interrupted.
+  Keys: ↑↓ scroll, ←→ walk the model, PENSAMENTO, NOVA and ABRIR with the box empty,
+  Tab closes, Esc stops an answer under way and closes otherwise.
   An answer to a spoken question opens the conversation passive (no keyboard, no
   click-away grab): it stays while you keep talking and folds a while after the
   last answer; a click, Tab or the tap take it over for typing.
@@ -187,6 +200,7 @@ notch and the notifications history.
 - `$XDG_RUNTIME_DIR/assistente/notch.watching`: only with `assistente-voz` on your PATH,
   the shell's pid, so the script knows the notch draws its states. A question typed in
   the card goes through a private file there (0600 in a 0700 folder), removed when read.
+  `fila.json` and `modelos.json` there belong to your script; the notch only reads them.
 
 ## Requirements
 

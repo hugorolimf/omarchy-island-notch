@@ -10,7 +10,7 @@ import "../Icons.js" as Icons
 import "../Shared.js" as Shared
 
 // Island Notch: tokens, the leader, and the state of dictation, the microphone, screen recording,
-// reminders, the voice assistant and Claude Code sessions.
+// reminders and Claude Code sessions (the voice assistant: IslandAsk).
 OUi.BarWidget {
   id: root
   moduleName: "io.github.hugorolimf.island"
@@ -27,7 +27,13 @@ OUi.BarWidget {
     "segure F10 para falar · ↑↓ rola · ←→ botões · tab fecha": "hold F10 to talk · ↑↓ scroll · ←→ buttons · tab closes",
     "enter envia · shift+enter quebra a linha · tab fecha": "enter sends · shift+enter new line · tab closes",
     "tab ou clique para escrever · segure F10 para falar": "tab or click to type · hold F10 to talk",
-    "Escreva ou segure o F10 e fale. Ele lembra do que vocês já conversaram hoje.": "Type, or hold F10 and talk. It remembers what you've said today."})
+    "Escreva ou segure o F10 e fale. Ele lembra do que vocês já conversaram hoje.": "Type, or hold F10 and talk. It remembers what you've said today.",
+    "ASSISTENTE": "ASSISTANT", "MODELOS DO CLAUDE CODE": "CLAUDE CODE MODELS",
+    "INTERROMPIDO": "INTERRUPTED", "Parando…": "Stopping…", "NA FILA · CLIQUE PARA EDITAR": "QUEUED · CLICK TO EDIT",
+    "Escreva a próxima; ela espera na fila…": "Type the next one; it waits in the queue…",
+    "↑↓ escolhe · enter confirma · esc volta": "↑↓ choose · enter picks · esc back",
+    "enter põe na fila · esc para · tab fecha": "enter queues · esc stops · tab closes",
+    "esc para a resposta · segure F10 para falar · tab fecha": "esc stops the answer · hold F10 to talk · tab closes"})
   function tr(text) { return portuguese || enText[text] === undefined ? text : enText[text] }
 
   // ---- anatomy tokens
@@ -132,112 +138,6 @@ OUi.BarWidget {
   // The most recently active session shows, the others count as "+N"; the
   // one on screen stays while it moved in the last 10 s, so two busy sessions
   // don't take turns at every step.
-  // ---- voice assistant, optional: a script writes its state to
-  // $XDG_RUNTIME_DIR/assistente/notch.json (listening, thinking, missed,
-  // answer); only the leader watches it. Drawn like dictation. Without
-  // assistente-voz on the PATH all of this stays asleep.
-  property bool askInstalled: false
-  readonly property string askDir: Quickshell.env("XDG_RUNTIME_DIR") + "/assistente"
-  property var srcAsk: null
-  readonly property var ask: leader ? leader.srcAsk : null
-  property real askNow: Date.now()
-  property real askDismissedTs: 0
-  property bool askHold: false
-  readonly property int askAnswerMs: ask ? Math.min(30000, Math.max(9000, String(ask.answer || "").length * 70)) : 0
-  readonly property string askState: {
-    var a = ask
-    if (!a || a.ts === askDismissedTs) return ""
-    var age = askNow - a.ts
-    if (a.state === "listening") return age < 100000 ? "listening" : ""
-    if (a.state === "thinking") return age < 300000 ? "thinking" : ""
-    if (a.state === "missed") return age < 2500 ? "missed" : ""
-    if (a.state === "answer") return (askHold || age < askAnswerMs) ? "answer" : ""
-    return ""
-  }
-  Timer {
-    interval: 400
-    repeat: true
-    running: root.askState !== ""
-    onTriggered: root.askNow = Date.now()
-  }
-  function dismissAsk() { if (ask) askDismissedTs = ask.ts; askHold = false }
-  readonly property bool askBusy: askState === "listening" || askState === "thinking"
-  // The day's conversation (assistente keeps it; notch.json carries it),
-  // oldest first: {quem: voce|claude, texto, hora, via|ok}. Yesterday's
-  // thread is not shown: the next question starts a new one.
-  readonly property var askThread: {
-    var a = ask
-    if (!a || !Array.isArray(a.thread)) return []
-    return a.dia === Qt.formatDate(new Date(askNow), "yyyy-MM-dd") ? a.thread : []
-  }
-  // A state written here before the scripts answer keeps the thread on screen.
-  function setAsk(state, heard) {
-    if (!leader) return
-    var a = leader.srcAsk || {}
-    leader.srcAsk = { state: state, heard: heard || "", answer: "", ok: state !== "missed", open: a.open || "",
-      dia: a.dia || "", thread: Array.isArray(a.thread) ? a.thread : [], esforco: a.esforco || "", ts: Date.now() }
-    leader.askNow = Date.now()
-  }
-  // How hard it thinks (PENSAMENTO in the card): Claude's five effort
-  // levels; assistente keeps the choice and echoes it in notch.json. A click
-  // steps up (after the top, back to the bottom), a right click steps down.
-  readonly property var askEfforts: ["low", "medium", "high", "xhigh", "max"]
-  readonly property string askEffort: ask && askEfforts.indexOf(ask.esforco) >= 0 ? ask.esforco : "high"
-  readonly property var askEffortLabel: ({ "low": "BAIXO", "medium": "MÉDIO", "high": "ALTO", "xhigh": "EXTRA", "max": "MÁXIMO" })
-  function cycleAskEffort(step) {
-    var order = askEfforts
-    var next = order[(order.indexOf(askEffort) + (step || 1) + order.length) % order.length]
-    if (leader) {
-      var a = leader.srcAsk || {}
-      var copy = {}
-      for (var k in a) copy[k] = a[k]
-      copy.esforco = next
-      leader.srcAsk = copy
-    }
-    Quickshell.execDetached(["sh", "-c", "PATH=\"$PATH:$HOME/.local/bin\"; exec assistente --esforco \"$1\" </dev/null >/dev/null 2>&1", "sh", next])
-  }
-
-  // The conversation card (F10 tap, card "ask"): the question goes to a
-  // private file through the shell's stdin, never a command line;
-  // assistente-voz texto reads and deletes it. The card stays open: the
-  // question shows in the thread at once, then the answer under it.
-  // Holding F10 with the card open talks inside it too.
-  property string askText: ""
-  function sendAsk(text) {
-    var t = String(text || "").trim()
-    if (!t || askBusy) return false
-    askText = t
-    askSend.stdinEnabled = true
-    askSend.running = true
-    setAsk("thinking", t)
-    return true
-  }
-  // NOVA: forget the conversation (assistente --nova), the next question
-  // opens another Claude session; the old one stays in the day's note.
-  function newAsk() {
-    if (askBusy) return
-    if (leader && leader.srcAsk) {
-      var a = leader.srcAsk
-      leader.srcAsk = { state: "idle", heard: "", answer: "", ok: true, open: a.open || "", dia: a.dia || "", thread: [], esforco: a.esforco || "", ts: Date.now() }
-    }
-    Quickshell.execDetached(["sh", "-c", "PATH=\"$PATH:$HOME/.local/bin\"; exec assistente --nova </dev/null >/dev/null 2>&1"])
-  }
-  Process {
-    id: askSend
-    command: ["sh", "-c",
-      "umask 077; PATH=\"$PATH:$HOME/.local/bin\"; command -v assistente-voz >/dev/null || exit 1; "
-      + "d=\"${XDG_RUNTIME_DIR:?}/assistente\"; mkdir -p \"$d\" && chmod 700 \"$d\" || exit 1; "
-      + "f=$(mktemp \"$d/texto.XXXXXX\") || exit 1; cat > \"$f\"; "
-      + "setsid -f assistente-voz texto \"$f\" </dev/null >/dev/null 2>&1"]
-    onStarted: { write(root.askText); stdinEnabled = false; root.askText = "" }
-    onExited: function(code) { if (code !== 0) root.setAsk("missed", "") }
-  }
-  function openAsk() {
-    var uri = ask ? String(ask.open || "") : ""
-    dismissAsk()
-    if (uri.indexOf("obsidian://") === 0) Quickshell.execDetached(["xdg-open", uri])
-  }
-
   readonly property string claudeDir: Quickshell.env("XDG_RUNTIME_DIR") + "/island-notch/claude"
   property var srcClaudeSessions: []
   readonly property var claudeSessions: leader ? leader.srcClaudeSessions : []

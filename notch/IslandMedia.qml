@@ -10,7 +10,7 @@ import "../Shared.js" as Shared
 
 // Island Notch: the player, the equalizer, the album colour, the notification state and the
 // on-screen indicators.
-IslandState {
+IslandAsk {
   id: root
   // used by the other parts of the notch
   readonly property var iphoneIconRetry: iphoneIconRetry
