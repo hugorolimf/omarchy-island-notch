@@ -141,7 +141,9 @@ Page {
           Keys.onEscapePressed: root.unpinNotification()
           Keys.onDownPressed: root.notifFocusButtons()
           Keys.onTabPressed: root.unpinNotification()
+          Keys.onPressed: function(event) { if (replyPaste.key(event)) event.accepted = true }
           onActiveFocusChanged: root.notifReplyFocus = activeFocus
+          PasteGuard { id: replyPaste; field: replyInput; singleLine: true }
           Text {
             textFormat: Text.PlainText
             anchors.verticalCenter: parent.verticalCenter

@@ -66,6 +66,7 @@ Rectangle {
     Keys.onTabPressed: askCard.picking ? askCard.closePicker() : root.closeCard()
     Keys.onBacktabPressed: askCard.picking ? askCard.closePicker() : root.closeCard()
     Keys.onPressed: function(event) {
+      if (askPaste.key(event)) { event.accepted = true; return }
       if (askCard.picking) {
         if (event.key === Qt.Key_Up) askCard.picker.move(-1)
         else if (event.key === Qt.Key_Down) askCard.picker.move(1)
@@ -90,6 +91,7 @@ Rectangle {
       else return
       event.accepted = true
     }
+    PasteGuard { id: askPaste; field: askInput }
     Text {
       textFormat: Text.PlainText
       anchors.verticalCenter: parent.verticalCenter

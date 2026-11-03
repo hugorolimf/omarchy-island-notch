@@ -211,7 +211,7 @@ notch and the notifications history.
 
 - Omarchy with the Quattro shell (Quickshell).
 - Optional, each for its own part: an MPRIS player, Omarchy's screen recorder, Omarchy's
-  voice dictation, `wl-copy` (copying codes), Claude Code with the hook above and
+  voice dictation, `wl-clipboard` (`wl-copy` copies codes; `wl-paste` pastes into the reply and assistant boxes, read in a child process with a size and time limit), Claude Code with the hook above and
   `python3` (the live session).
 
 ## Remove
