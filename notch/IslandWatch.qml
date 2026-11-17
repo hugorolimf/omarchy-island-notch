@@ -18,10 +18,12 @@ IslandCards {
 
   // =====================================================================
   // Dictation: `voxtype status --follow` pushes a JSON line per change.
+  // Called directly: Omarchy 4.5 removed its omarchy-voxtype-status wrapper.
 
   Process {
     id: voxProc
-    command: ["omarchy-voxtype-status"]
+    command: ["setpriv", "--pdeathsig", "TERM",
+      "voxtype", "status", "--follow", "--format", "json", "--extended"]
     running: root.isLeader
     stdout: SplitParser {
       onRead: function(line) {
